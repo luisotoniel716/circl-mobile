@@ -3,7 +3,8 @@
 
 export type TeamCode =
   | 'AME' | 'GDL' | 'CAZ' | 'PUM' | 'MTY' | 'TIG' | 'TOL'
-  | 'LEO' | 'PAC' | 'SAN' | 'NEC' | 'ATL' | 'PUE' | 'JUA';
+  | 'LEO' | 'PAC' | 'SAN' | 'NEC' | 'ATL' | 'PUE' | 'JUA'
+  | 'QRO' | 'TIJ' | 'MAZ' | 'ATSL';
 
 export interface Team {
   code: TeamCode;
@@ -13,6 +14,8 @@ export interface Team {
   secondary: string;
   text: string;
   initial: string;
+  /** Local require()'d PNG asset. Falls back to initial-circle when missing. */
+  logo?: number;
 }
 
 export interface User {
@@ -37,6 +40,8 @@ export interface Match {
   home: TeamCode;
   away: TeamCode;
   kickoff: string;
+  /** Raw ISO string of kickoff time, when sourced from Supabase. */
+  kickoff_at?: string;
   stadium: string;
   round: string;
   status: MatchStatus;
@@ -44,6 +49,13 @@ export interface Match {
   pts: string | null;
   score: [number, number] | null;
   correct?: boolean;
+  /**
+   * Per-group pick coverage for the current user. When the user belongs to
+   * multiple groups but has only picked in some, the UI shows N/M alongside
+   * the pick label so it's clear it isn't applied everywhere.
+   */
+  myPickGroupsPicked?: number;
+  myPickGroupsTotal?: number;
 }
 
 export interface Group {
@@ -51,6 +63,8 @@ export interface Group {
   name: string;
   icon: string;
   accent: string;
+  /** Optional cover photo. When present, UIs should render this instead of the emoji icon. */
+  image_url?: string | null;
   members: number;
   myRank: number;
   myPts: number;

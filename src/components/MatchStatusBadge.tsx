@@ -22,7 +22,7 @@ export function MatchStatusBadge({ status, minute }: Props) {
         }}
       >
         <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.paper }} />
-        <Text style={{ color: colors.paper, fontSize: 10, fontWeight: '800' }}>LIVE {minute}</Text>
+        <Text style={{ color: colors.paper, fontSize: 10, fontWeight: '800' }}>LIVE{minute ? ` ${minute}` : ''}</Text>
       </View>
     );
   }

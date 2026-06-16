@@ -1,8 +1,9 @@
-import { View, ScrollView, Pressable } from 'react-native';
+import { View, ScrollView, Pressable, Alert } from 'react-native';
 import { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
 import { ScreenContainer, TopBar, Section, CButton, Avatar, Pill, Icon, IconName, Text, colors } from '../src/components';
-import { USERS } from '../src/data';
+import { useAuth } from '../src/lib/auth';
+import { useAccent } from '../src/lib/tweaks';
 
 type Item = { icon: IconName; l: string; sub: string; trail?: ReactNode };
 
@@ -23,30 +24,100 @@ const SUPPORT: Item[] = [
   { icon: 'book', l: 'Terms & privacy', sub: 'v2.4 · Updated Sept 2026' },
 ];
 
+function initialsOf(name?: string | null) {
+  if (!name) return '?';
+  return name.split(' ').map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+}
+
 export default function Settings() {
   const router = useRouter();
+  const { profile, signOut } = useAuth();
+  const { accentColor } = useAccent();
+
+  async function handleSignOut() {
+    Alert.alert('Cerrar sesión', '¿Seguro que quieres salir?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Salir',
+        style: 'destructive',
+        onPress: async () => {
+          await signOut();
+          router.replace('/(auth)/welcome');
+        },
+      },
+    ]);
+  }
+
   return (
     <ScreenContainer theme="dark">
       <TopBar title="Settings" onBack />
 
       <ScrollView contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
         <View style={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: 12 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: colors.s800, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)' }}>
-            <Avatar user={USERS.me} size={48} />
+          <Pressable
+            onPress={() => router.push('/edit-profile')}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: colors.s800, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)' }}
+          >
+            <Avatar initials={initialsOf(profile?.name)} size={48} bg={accentColor} />
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 15, fontWeight: '800', color: colors.paper }}>{USERS.me.name}</Text>
-              <Text style={{ fontSize: 12, color: colors.mist }}>{USERS.me.username} · diego@example.com</Text>
+              <Text style={{ fontSize: 15, fontWeight: '800', color: colors.paper }}>
+                {profile?.name ?? '—'}
+              </Text>
+              <Text style={{ fontSize: 12, color: colors.mist }}>
+                @{profile?.username ?? '—'}
+              </Text>
             </View>
             <Icon name="chev" size={18} color={colors.mist} />
-          </View>
+          </Pressable>
         </View>
+
+        {profile?.is_admin ? (
+          <View style={{ paddingHorizontal: 20, paddingBottom: 12 }}>
+            <Pressable
+              onPress={() => router.push('/admin')}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 12,
+                padding: 14,
+                backgroundColor: colors.gold + '18',
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: colors.gold + '55',
+              }}
+            >
+              <View style={{
+                width: 36, height: 36, borderRadius: 10,
+                backgroundColor: colors.gold,
+                alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Icon name="settings" size={18} color={colors.ink} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: '800', color: colors.paper }}>
+                  Panel de admin
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.paper2 }}>
+                  Editar partidos, marcadores y resultados
+                </Text>
+              </View>
+              <Icon name="chev" size={18} color={colors.gold} />
+            </Pressable>
+          </View>
+        ) : null}
 
         <Section title="PREFERENCES"><SettingsList items={PREFERENCES} /></Section>
         <Section title="ACCOUNT"><SettingsList items={ACCOUNT} /></Section>
         <Section title="SUPPORT"><SettingsList items={SUPPORT} /></Section>
 
         <View style={{ paddingHorizontal: 20, paddingTop: 8, gap: 8 }}>
-          <CButton variant="ghostDark" size="md" full lead={<Icon name="logout" size={16} color={colors.paper} />} onPress={() => router.replace('/(auth)/welcome')}>
+          <CButton
+            variant="ghostDark"
+            size="md"
+            full
+            lead={<Icon name="logout" size={16} color={colors.paper} />}
+            onPress={handleSignOut}
+          >
             Log out
           </CButton>
           <Pressable style={{ padding: 12, alignItems: 'center' }}>

@@ -6,7 +6,7 @@ export type IconName =
   | 'close' | 'check' | 'add' | 'addUser' | 'filter' | 'chat' | 'eye' | 'eyeOff'
   | 'trend' | 'arrowUp' | 'chev' | 'chevDown' | 'lock' | 'mail' | 'user' | 'at'
   | 'flag' | 'trophy' | 'star' | 'settings' | 'edit' | 'logout' | 'fire' | 'qr'
-  | 'link' | 'sparkle' | 'target' | 'wifi' | 'book';
+  | 'link' | 'sparkle' | 'target' | 'wifi' | 'book' | 'camera' | 'image' | 'trash' | 'crown';
 
 interface IconProps {
   name: IconName;
@@ -107,6 +107,14 @@ export function Icon({ name, size = 22, color = colors.paper, stroke = 2, fill =
       return <Svg {...common}><Path d="M5 12a10 10 0 0 1 14 0" /><Path d="M8.5 15.5a5 5 0 0 1 7 0" /><Circle cx={12} cy={19} r={1} fill={color} /></Svg>;
     case 'book':
       return <Svg {...common}><Path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><Path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></Svg>;
+    case 'camera':
+      return <Svg {...common}><Path d="M4 7h3l2-2h6l2 2h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" /><Circle cx={12} cy={13} r={4} /></Svg>;
+    case 'image':
+      return <Svg {...common}><Rect x={3} y={4} width={18} height={16} rx={2} /><Circle cx={9} cy={10} r={2} /><Path d="m21 16-5-5-7 8" /></Svg>;
+    case 'trash':
+      return <Svg {...common}><Path d="M4 7h16" /><Path d="M10 11v6" /><Path d="M14 11v6" /><Path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" /><Path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3" /></Svg>;
+    case 'crown':
+      return <Svg {...common}><Path d="M3 8l4 4 5-7 5 7 4-4-2 11H5z" /></Svg>;
     default:
       return null;
   }

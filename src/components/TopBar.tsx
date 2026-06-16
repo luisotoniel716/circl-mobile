@@ -33,6 +33,7 @@ export function TopBar({ title, onBack, right, big = false, color }: TopBarProps
         ) : null}
       </View>
       <Text
+        numberOfLines={1}
         style={{
           flex: 1,
           textAlign: 'center',
@@ -43,7 +44,15 @@ export function TopBar({ title, onBack, right, big = false, color }: TopBarProps
       >
         {title}
       </Text>
-      <View style={{ width: 34, alignItems: 'flex-end' }}>{right}</View>
+      <View
+        style={{
+          minWidth: 34,
+          alignItems: 'flex-end',
+          flexShrink: 0,
+        }}
+      >
+        {right}
+      </View>
     </View>
   );
 }

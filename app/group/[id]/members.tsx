@@ -1,14 +1,34 @@
-import { View, ScrollView, Pressable } from 'react-native';
-import { ScreenContainer, TopBar, Section, Avatar, Pill, Icon, Text, colors } from '../../../src/components';
-import { USERS } from '../../../src/data';
-import type { User } from '../../../src/types';
+import { useState, useMemo } from 'react';
+import { View, ScrollView, ActivityIndicator } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
+import {
+  ScreenContainer, TopBar, Section, Avatar, Pill, Icon, Text, colors,
+} from '../../../src/components';
+import { useAuth } from '../../../src/lib/auth';
+import { useGroup, useGroupMembers, type GroupMember } from '../../../src/lib/queries';
 
-type Role = 'owner' | 'admin' | 'member';
+function initialsOf(name?: string | null) {
+  if (!name) return '?';
+  return name.split(' ').map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+}
 
 export default function GroupMembers() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const { user } = useAuth();
+  const { data: group } = useGroup(id);
+  const { data: members = [], isLoading } = useGroupMembers(id);
+  const [, setQ] = useState(''); // search reserved for later
+
+  const { admins, regular } = useMemo(() => {
+    return {
+      admins:  members.filter((m) => m.role === 'admin'),
+      regular: members.filter((m) => m.role === 'member'),
+    };
+  }, [members]);
+
   return (
     <ScreenContainer theme="dark">
-      <TopBar title="Members" onBack right={<Icon name="addUser" size={20} color={colors.paper} />} />
+      <TopBar title="Members" onBack />
 
       <View style={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: 10 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.s800, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12 }}>
@@ -17,43 +37,65 @@ export default function GroupMembers() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
-        <Section title="OWNER">
-          <MemberRow u={USERS.me} role="owner" me />
-        </Section>
-        <Section title="ADMINS (1)">
-          <MemberRow u={USERS.u1} role="admin" />
-        </Section>
-        <Section title="MEMBERS (6)">
-          {[USERS.u2, USERS.u3, USERS.u4, USERS.u5, USERS.u6, USERS.u7].map((u) => (
-            <MemberRow key={u.id} u={u} role="member" canRemove />
-          ))}
-        </Section>
-      </ScrollView>
+      {isLoading ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={colors.paper2} />
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
+          {admins.length > 0 ? (
+            <Section title={`ADMINS (${admins.length})`}>
+              {admins.map((m) => (
+                <MemberRow
+                  key={m.user_id}
+                  m={m}
+                  me={m.user_id === user?.id}
+                  groupAccent={group?.accent ?? colors.s700}
+                />
+              ))}
+            </Section>
+          ) : null}
+          <Section title={`MEMBERS (${regular.length})`}>
+            {regular.length === 0 ? (
+              <Text style={{ fontSize: 13, color: colors.paper2, paddingVertical: 12 }}>
+                Aún no hay más miembros. ¡Comparte el código de invitación!
+              </Text>
+            ) : (
+              regular.map((m) => (
+                <MemberRow
+                  key={m.user_id}
+                  m={m}
+                  me={m.user_id === user?.id}
+                  groupAccent={group?.accent ?? colors.s700}
+                />
+              ))
+            )}
+          </Section>
+        </ScrollView>
+      )}
     </ScreenContainer>
   );
 }
 
-function MemberRow({ u, role, me, canRemove }: { u: User; role: Role; me?: boolean; canRemove?: boolean }) {
-  const tint = role === 'owner' ? colors.gold : role === 'admin' ? colors.blue : colors.mist;
+function MemberRow({
+  m, me, groupAccent,
+}: { m: GroupMember; me: boolean; groupAccent: string }) {
+  const tint = m.role === 'admin' ? colors.gold : colors.mist;
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)' }}>
-      <Avatar user={u} size={40} />
+      <Avatar initials={initialsOf(m.profile?.name)} size={40} bg={groupAccent} imageUrl={m.profile?.avatar_url} />
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Text style={{ fontSize: 14, fontWeight: '800', color: colors.paper }}>{me ? 'You' : u.name}</Text>
+          <Text style={{ fontSize: 14, fontWeight: '800', color: colors.paper }}>
+            {me ? 'You' : (m.profile?.name ?? '—')}
+          </Text>
           {me ? <Pill tone="ghost" size="sm">YOU</Pill> : null}
         </View>
-        <Text style={{ fontSize: 11.5, color: colors.mist }}>{u.username}</Text>
+        <Text style={{ fontSize: 11.5, color: colors.mist }}>@{m.profile?.username ?? '—'}</Text>
       </View>
       <View style={{ backgroundColor: tint + '22', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 9999 }}>
-        <Text style={{ fontSize: 10, fontWeight: '800', color: tint, textTransform: 'uppercase' }}>{role}</Text>
+        <Text style={{ fontSize: 10, fontWeight: '800', color: tint, textTransform: 'uppercase' }}>{m.role}</Text>
       </View>
-      {canRemove ? (
-        <Pressable hitSlop={8} style={{ padding: 6 }}>
-          <Icon name="close" size={18} color={colors.mist} />
-        </Pressable>
-      ) : null}
     </View>
   );
 }

@@ -85,17 +85,37 @@ export function MatchRow({ m, onPress, showPick = true }: MatchRowProps) {
             marginTop: 2,
           }}
         >
-          {m.status === 'upcoming' && m.myPick ? (
-            <>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Icon name="check" size={14} color={colors.green} stroke={2.6} />
-                <Text style={{ fontSize: 12, color: colors.paper2 }}>
-                  Your pick: <Text style={{ color: colors.paper, fontWeight: '800' }}>{LIGAMX[m.myPick].name}</Text>
+          {m.status === 'upcoming' && m.myPick ? (() => {
+            const picked = m.myPickGroupsPicked ?? 0;
+            const total  = m.myPickGroupsTotal  ?? 0;
+            // "Partial" when the user belongs to >1 groups but hasn't picked
+            // in all of them yet. Surface this so they don't think they're
+            // covered everywhere.
+            const isPartial = total > 1 && picked > 0 && picked < total;
+            return (
+              <>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                  <Icon
+                    name="check"
+                    size={14}
+                    color={isPartial ? colors.gold : colors.green}
+                    stroke={2.6}
+                  />
+                  <Text style={{ fontSize: 12, color: colors.paper2 }} numberOfLines={1}>
+                    Your pick: <Text style={{ color: colors.paper, fontWeight: '800' }}>{LIGAMX[m.myPick!].name}</Text>
+                    {isPartial ? (
+                      <Text style={{ color: colors.gold, fontWeight: '800' }}>
+                        {' '}· {picked}/{total} grupos
+                      </Text>
+                    ) : null}
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 11, fontWeight: '800', color: colors.gold }}>
+                  {isPartial ? 'Completar ›' : 'Change ›'}
                 </Text>
-              </View>
-              <Text style={{ fontSize: 11, fontWeight: '800', color: colors.gold }}>Change ›</Text>
-            </>
-          ) : null}
+              </>
+            );
+          })() : null}
 
           {m.status === 'upcoming' && !m.myPick ? (
             <>

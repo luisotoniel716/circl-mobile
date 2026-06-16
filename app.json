@@ -38,6 +38,24 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      "expo-font",
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Circl necesita acceso a tus fotos para que puedas elegir foto de perfil o foto del grupo.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#002DE8",
+          "defaultChannel": "default"
+        }
       ]
     ],
     "experiments": {
