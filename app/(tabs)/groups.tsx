@@ -1,14 +1,30 @@
-import { View, FlatList, Pressable, ActivityIndicator } from 'react-native';
+import { View, FlatList, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   ScreenContainer, TopBar, Pill, GroupIcon, Icon, Text, colors,
 } from '../../src/components';
-import { useMyGroups } from '../../src/lib/queries';
+import {
+  useMyGroups,
+  useMyPinnedGroupIds, useToggleGroupPin,
+} from '../../src/lib/queries';
 import type { Group } from '../../src/types';
 
 export default function Groups() {
   const router = useRouter();
   const { data: groups = [], isLoading } = useMyGroups();
+  const { data: pinnedIds = [] } = useMyPinnedGroupIds();
+  const togglePin = useToggleGroupPin();
+
+  // Wraps the toggle so a "limit reached" error surfaces as a friendly
+  // Alert instead of an unhandled rejection. Other errors fall through
+  // to a generic alert.
+  function handleTogglePin(groupId: string) {
+    togglePin.mutate(groupId, {
+      onError: (err) => {
+        Alert.alert('Límite alcanzado', err.message);
+      },
+    });
+  }
 
   const totalMembers = groups.reduce((s, g) => s + g.members, 0);
   const bestRank     = groups.length ? Math.min(...groups.map((g) => g.myRank)) : 0;
@@ -25,6 +41,7 @@ export default function Groups() {
       <TopBar
         title="My groups"
         big
+        onBack
         right={
           <Pressable onPress={() => router.push('/group/join')} hitSlop={8}>
             <Icon name="qr" size={20} color={colors.paper} />
@@ -83,44 +100,79 @@ export default function Groups() {
               </Text>
             </View>
           }
-          renderItem={({ item: g }: { item: Group }) => (
-            <Pressable
-              onPress={() => router.push({ pathname: '/group/[id]', params: { id: g.id } })}
-              style={{
-                backgroundColor: colors.s800,
-                borderRadius: 18,
-                paddingVertical: 14,
-                paddingHorizontal: 16,
-                borderWidth: 1,
-                borderColor: 'rgba(255,255,255,0.04)',
-                overflow: 'hidden',
-              }}
-            >
-              <View style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 4, backgroundColor: g.accent }} />
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
-                <GroupIcon imageUrl={g.image_url} emoji={g.icon} accent={g.accent} size={46} radius={14} />
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                    <Text style={{ fontWeight: '800', fontSize: 15, color: colors.paper }}>{g.name}</Text>
-                    {g.myRank === 1 && g.members > 1 ? <Pill tone="gold" size="sm">👑 #1</Pill> : null}
-                  </View>
-                  <Text style={{ fontSize: 11.5, color: colors.mist, fontWeight: '600' }}>
-                    {g.members} {g.members === 1 ? 'miembro' : 'miembros'}
-                  </Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
-                    <View style={{ flex: 1 }} />
-                    <View style={{ alignItems: 'flex-end' }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4 }}>
-                        <Text style={{ fontSize: 18, fontWeight: '900', color: colors.paper }}>#{g.myRank}</Text>
-                        <Text style={{ fontSize: 10, color: colors.mist, fontWeight: '700' }}>of {g.members}</Text>
+          renderItem={({ item: g }: { item: Group }) => {
+            const isPinned = pinnedIds.includes(g.id);
+            return (
+              <Pressable
+                onPress={() => router.push({ pathname: '/group/[id]', params: { id: g.id } })}
+                style={{
+                  backgroundColor: colors.s800,
+                  borderRadius: 18,
+                  paddingVertical: 14,
+                  paddingHorizontal: 16,
+                  borderWidth: 1,
+                  borderColor: 'rgba(255,255,255,0.04)',
+                  overflow: 'hidden',
+                }}
+              >
+                <View style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 4, backgroundColor: g.accent }} />
+
+                {/* Star pin toggle — absolute in the corner so it doesn't
+                    push around the existing layout. Tapping the star does
+                    NOT navigate into the group; hitSlop is generous to make
+                    it easy to hit without long-pressing the whole card. */}
+                <Pressable
+                  onPress={() => handleTogglePin(g.id)}
+                  hitSlop={12}
+                  style={{
+                    position: 'absolute',
+                    top: 10,
+                    right: 10,
+                    width: 32,
+                    height: 32,
+                    borderRadius: 16,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 2,
+                  }}
+                >
+                  <Icon
+                    name="star"
+                    size={20}
+                    color={isPinned ? colors.gold : colors.mist}
+                    fill={isPinned ? colors.gold : 'none'}
+                    stroke={2}
+                  />
+                </Pressable>
+
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+                  <GroupIcon imageUrl={g.image_url} emoji={g.icon} accent={g.accent} size={46} radius={14} />
+                  <View style={{ flex: 1 }}>
+                    {/* Reserve room on the right for the star (32 + 8 padding). */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2, paddingRight: 40 }}>
+                      <Text numberOfLines={1} style={{ fontWeight: '800', fontSize: 15, color: colors.paper, flexShrink: 1 }}>
+                        {g.name}
+                      </Text>
+                      {g.myRank === 1 && g.members > 1 ? <Pill tone="gold" size="sm">👑 #1</Pill> : null}
+                    </View>
+                    <Text style={{ fontSize: 11.5, color: colors.mist, fontWeight: '600' }}>
+                      {g.members} {g.members === 1 ? 'miembro' : 'miembros'}
+                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+                      <View style={{ flex: 1 }} />
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4 }}>
+                          <Text style={{ fontSize: 18, fontWeight: '900', color: colors.paper }}>#{g.myRank}</Text>
+                          <Text style={{ fontSize: 10, color: colors.mist, fontWeight: '700' }}>of {g.members}</Text>
+                        </View>
+                        <Text style={{ fontSize: 11, fontWeight: '800', color: colors.gold }}>{g.myPts} pts</Text>
                       </View>
-                      <Text style={{ fontSize: 11, fontWeight: '800', color: colors.gold }}>{g.myPts} pts</Text>
                     </View>
                   </View>
                 </View>
-              </View>
-            </Pressable>
-          )}
+              </Pressable>
+            );
+          }}
           ListFooterComponent={
             <Pressable
               onPress={() => router.push('/group/join')}

@@ -165,7 +165,7 @@ export default function FriendsList() {
                 {filteredFriends.map((f, i) => (
                   <Pressable
                     key={f.friendship_id}
-                    onPress={() => router.push('/public-profile')}
+                    onPress={() => router.push({ pathname: '/user/[id]', params: { id: f.user.id } })}
                     onLongPress={() => {
                       Alert.alert(
                         f.user.name,

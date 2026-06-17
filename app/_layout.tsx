@@ -121,8 +121,10 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.s900 }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
-          <TweakProvider>
-            <AuthProvider>
+          {/* AuthProvider wraps TweakProvider so per-user preferences (like
+              the accent color) can be keyed by the signed-in user id. */}
+          <AuthProvider>
+            <TweakProvider>
               <AuthGate />
               <Stack
                 screenOptions={{
@@ -130,8 +132,8 @@ export default function RootLayout() {
                   contentStyle: { backgroundColor: colors.s900 },
                 }}
               />
-            </AuthProvider>
-          </TweakProvider>
+            </TweakProvider>
+          </AuthProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

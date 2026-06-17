@@ -1,6 +1,13 @@
 import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import Animated, {
+  FadeInDown,
+  Easing,
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+} from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import {
   ScreenContainer, Section, Avatar, AvatarStack, GroupIcon, MatchRow, Icon, Text, colors,
@@ -8,7 +15,10 @@ import {
 } from '../../src/components';
 import { useAccent } from '../../src/lib/tweaks';
 import { useAuth } from '../../src/lib/auth';
-import { useMatches, useMyGroups, useMyPickedMatchIds, useMyAllPicks, useUnreadCount } from '../../src/lib/queries';
+import {
+  useMatches, useMyGroups, useMyPickedMatchIds, useMyAllPicks, useUnreadCount,
+  useMyPinnedGroupIds,
+} from '../../src/lib/queries';
 import type { TeamCode, Match } from '../../src/types';
 
 type Chip = 'Liga MX' | 'Today' | 'Live' | 'My picks' | 'Pending';
@@ -44,7 +54,21 @@ export default function Home() {
   const { data: pickedIds = new Set<string>() } = useMyPickedMatchIds();
   const { data: myPicks = {} } = useMyAllPicks();
   const { data: groups  = [], isLoading: groupsLoading  } = useMyGroups();
+  const { data: pinnedIds = [] } = useMyPinnedGroupIds();
   const { data: unreadCount = 0 } = useUnreadCount();
+
+  // Pinned groups drive the home Wallet stack. Order them by the user's
+  // pin sequence (the array order in `pinnedIds` reflects pin order). If
+  // the user hasn't pinned anything yet, fall back to the first 3 from
+  // their group list so the home never looks empty.
+  const stackGroups = useMemo(() => {
+    if (pinnedIds.length === 0) return groups.slice(0, 3);
+    const byId = new Map(groups.map((g) => [g.id, g]));
+    return pinnedIds
+      .map((id) => byId.get(id))
+      .filter((g): g is NonNullable<typeof g> => !!g);
+  }, [groups, pinnedIds]);
+  const usingFallback = pinnedIds.length === 0 && groups.length > 0;
 
   const [chip, setChip] = useState<Chip>('Today');
   const [addFriendOpen, setAddFriendOpen] = useState(false);
@@ -217,6 +241,50 @@ export default function Home() {
           </LinearGradient>
         </View>
 
+        {/* Active circls — placed above the chip row so groups are the
+            primary entry point now that the Groups tab was removed from
+            the bottom bar. */}
+        <Section
+          title={usingFallback ? 'TUS GRUPOS' : 'TUS CIRCLS ANCLADOS'}
+          action={
+            <Text onPress={() => router.push('/(tabs)/groups')} style={{ fontSize: 11, fontWeight: '700', color: colors.paper2 }}>
+              {usingFallback ? 'Anclar grupos ›' : 'All groups ›'}
+            </Text>
+          }
+          style={{ marginTop: 4 }}
+        >
+          {groupsLoading ? (
+            <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+              <ActivityIndicator color={colors.paper2} />
+            </View>
+          ) : groups.length === 0 ? (
+            <Pressable
+              onPress={() => router.push('/(tabs)/groups')}
+              style={{
+                padding: 18,
+                borderRadius: 16,
+                backgroundColor: colors.s800,
+                borderWidth: 1,
+                borderColor: 'rgba(255,255,255,0.06)',
+                borderStyle: 'dashed',
+                alignItems: 'center',
+              }}
+            >
+              <Text style={{ fontSize: 13, fontWeight: '700', color: colors.paper }}>
+                Aún no tienes grupos
+              </Text>
+              <Text style={{ fontSize: 12, color: colors.paper2, marginTop: 4 }}>
+                Crea uno o únete con un código ›
+              </Text>
+            </Pressable>
+          ) : (
+            <WalletStack
+              groups={stackGroups}
+              onPressGroup={(id) => router.push({ pathname: '/group/[id]', params: { id } })}
+            />
+          )}
+        </Section>
+
         {/* Filter chips */}
         <ScrollView
           horizontal
@@ -324,83 +392,29 @@ export default function Home() {
             </Text>
           ) : (
             <View style={{ gap: 10 }}>
-              {(chip === 'Liga MX' ? matches : matches.slice(0, 5)).map((m) => (
-                <MatchRow
-                  key={m.id}
-                  m={m}
-                  onPress={() => router.push({ pathname: '/match/[id]', params: { id: m.id } })}
-                />
-              ))}
-            </View>
-          )}
-        </Section>
-
-        {/* Active circls */}
-        <Section
-          title="YOUR ACTIVE CIRCLS"
-          action={
-            <Text onPress={() => router.push('/(tabs)/groups')} style={{ fontSize: 11, fontWeight: '700', color: colors.paper2 }}>
-              All groups ›
-            </Text>
-          }
-          style={{ marginTop: 4 }}
-        >
-          {groupsLoading ? (
-            <View style={{ paddingVertical: 24, alignItems: 'center' }}>
-              <ActivityIndicator color={colors.paper2} />
-            </View>
-          ) : groups.length === 0 ? (
-            <Pressable
-              onPress={() => router.push('/(tabs)/groups')}
-              style={{
-                padding: 18,
-                borderRadius: 16,
-                backgroundColor: colors.s800,
-                borderWidth: 1,
-                borderColor: 'rgba(255,255,255,0.06)',
-                borderStyle: 'dashed',
-                alignItems: 'center',
-              }}
-            >
-              <Text style={{ fontSize: 13, fontWeight: '700', color: colors.paper }}>
-                Aún no tienes grupos
-              </Text>
-              <Text style={{ fontSize: 12, color: colors.paper2, marginTop: 4 }}>
-                Crea uno o únete con un código ›
-              </Text>
-            </Pressable>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingBottom: 4 }}>
-              {groups.slice(0, 3).map((g) => (
-                <Pressable
-                  key={g.id}
-                  onPress={() => router.push({ pathname: '/group/[id]', params: { id: g.id } })}
-                  style={{
-                    width: 200,
-                    backgroundColor: colors.s800,
-                    borderRadius: 16,
-                    padding: 14,
-                    borderWidth: 1,
-                    borderColor: 'rgba(255,255,255,0.04)',
-                    borderTopWidth: 3,
-                    borderTopColor: g.accent,
-                  }}
+              {(chip === 'Liga MX' ? matches : matches.slice(0, 5)).map((m, i) => (
+                <Animated.View
+                  // `chip` is part of the key so changing the filter forces a
+                  // fresh mount → the cards re-stagger instead of just swapping
+                  // in-place. Limit the delay window so longer lists don't end
+                  // up with a 1s tail of animations.
+                  key={`${chip}-${m.id}`}
+                  // Smooth slide-up with no bounce — card rises from below
+                  // and decelerates straight into its resting position.
+                  // `Easing.out(cubic)` starts fast and softly slows down,
+                  // so the motion still reads as elegant rather than linear.
+                  entering={FadeInDown
+                    .delay(Math.min(i, 8) * 55)
+                    .duration(420)
+                    .easing(Easing.out(Easing.cubic))}
                 >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <GroupIcon imageUrl={g.image_url} emoji={g.icon} accent={g.accent} size={30} radius={8} />
-                    <Text numberOfLines={1} style={{ fontWeight: '800', fontSize: 14, flex: 1, color: colors.paper }}>{g.name}</Text>
-                  </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-                    <Text style={{ fontSize: 22, fontWeight: '900', color: colors.paper }}>#{g.myRank}</Text>
-                    <Text style={{ fontSize: 11, color: colors.mist, fontWeight: '700' }}>of {g.members}</Text>
-                  </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
-                    <AvatarStack items={g.avatars.map((i) => ({ initials: i }))} size={20} max={4} />
-                    <Text style={{ fontSize: 11, fontWeight: '800', color: colors.gold }}>{g.myPts} pts</Text>
-                  </View>
-                </Pressable>
+                  <MatchRow
+                    m={m}
+                    onPress={() => router.push({ pathname: '/match/[id]', params: { id: m.id } })}
+                  />
+                </Animated.View>
               ))}
-            </ScrollView>
+            </View>
           )}
         </Section>
       </ScrollView>
@@ -418,3 +432,175 @@ const iconBtn = {
   alignItems: 'center' as const,
   justifyContent: 'center' as const,
 };
+
+// ─── Wallet-style group stack ────────────────────────────────────
+//
+// Apple-Wallet-inspired vertical stack of "Active Circls" cards.
+//
+// Visual layout (top → bottom of section):
+//   • The BACK card sits at the top — only its header peeks out.
+//   • Each card in front of it sits lower, covering the header below.
+//   • The FRONT card (groups[0]) is at the bottom of the stack and
+//     is fully visible. It's the user's "primary" group.
+//
+// Entry animation (Wallet "fan out" feel):
+//   • The back card lands first (no delay).
+//   • Each card in front lands ~95ms later than the one behind it.
+//   • The front card lands last — most dramatic arrival.
+//
+// Tap behaviour:
+//   • Card lifts ~8px and scales up subtly (Wallet "select" cue).
+//   • A short delay (160ms) lets the user perceive the response
+//     before navigation kicks in.
+//
+const CARD_H        = 134;
+const STACK_OFFSET  = 76;   // visible peek of each lower card
+const STAGGER_MS    = 95;
+
+interface WalletStackProps {
+  groups:       Array<{
+    id:        string;
+    name:      string;
+    icon:      string | null;
+    image_url: string | null;
+    accent:    string;
+    myRank:    number;
+    myPts:     number;
+    members:   number;
+    avatars:   string[];
+  }>;
+  onPressGroup: (id: string) => void;
+}
+
+function WalletStack({ groups, onPressGroup }: WalletStackProps) {
+  const N = groups.length;
+  if (N === 0) return null;
+  const stackHeight = CARD_H + (N - 1) * STACK_OFFSET;
+
+  return (
+    <View style={{ height: stackHeight, position: 'relative' }}>
+      {groups.map((g, i) => {
+        // groups[0] is the FRONT card (visually at the bottom):
+        //   visualPos N-1 = sits at top of stack (back, peeks only)
+        //   visualPos 0   = sits at bottom of stack (front, fully shown)
+        const visualPos = N - 1 - i;
+        // Back card lands first; front card lands last.
+        const entryDelay = (N - 1 - visualPos) * STAGGER_MS;
+        return (
+          <WalletCard
+            key={g.id}
+            group={g}
+            visualPos={visualPos}
+            entryDelay={entryDelay}
+            zIdx={N - i}
+            onPress={() => onPressGroup(g.id)}
+          />
+        );
+      })}
+    </View>
+  );
+}
+
+interface WalletCardProps {
+  group:      WalletStackProps['groups'][number];
+  visualPos:  number;
+  entryDelay: number;
+  zIdx:       number;
+  onPress:    () => void;
+}
+
+function WalletCard({ group: g, visualPos, entryDelay, zIdx, onPress }: WalletCardProps) {
+  // Press = 0 idle, Press = 1 fully "selected" (lifted & scaled).
+  const press = useSharedValue(0);
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: -press.value * 8 },
+      { scale: 1 + press.value * 0.022 },
+    ],
+  }));
+
+  function handlePress() {
+    press.value = withSpring(1, { damping: 18, stiffness: 320 });
+    // Give the user ~160ms to see the lift before we navigate.
+    setTimeout(() => {
+      press.value = withSpring(0, { damping: 18, stiffness: 320 });
+      onPress();
+    }, 160);
+  }
+
+  return (
+    <Animated.View
+      entering={FadeInDown.delay(entryDelay).springify().damping(20).stiffness(320)}
+      style={[
+        {
+          position: 'absolute',
+          top: visualPos * STACK_OFFSET,
+          left: 0,
+          right: 0,
+          height: CARD_H,
+          zIndex: zIdx,
+          // Shadow lifts the card off the one behind it for stack depth.
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -3 },
+          shadowOpacity: 0.35,
+          shadowRadius: 8,
+          elevation: 8,
+        },
+        animStyle,
+      ]}
+    >
+      <Pressable
+        onPress={handlePress}
+        style={{
+          flex: 1,
+          backgroundColor: colors.s800,
+          borderRadius: 18,
+          padding: 14,
+          borderWidth: 1,
+          borderColor: 'rgba(255,255,255,0.06)',
+          borderTopWidth: 4,
+          borderTopColor: g.accent,
+        }}
+      >
+        {/* ── Top row — visible in peeks ─────────────────────────
+            Content here must fit in the top ~58px of the card so
+            users can identify each group from its peeking header. */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <GroupIcon imageUrl={g.image_url} emoji={g.icon} accent={g.accent} size={34} radius={10} />
+          <View style={{ flex: 1 }}>
+            <Text numberOfLines={1} style={{ fontWeight: '800', fontSize: 15, color: colors.paper }}>
+              {g.name}
+            </Text>
+            <Text style={{ fontSize: 11, color: colors.mist, fontWeight: '700', marginTop: 1 }}>
+              #{g.myRank} of {g.members}
+            </Text>
+          </View>
+          <Text style={{ fontSize: 13, fontWeight: '900', color: colors.gold }}>
+            {g.myPts} pts
+          </Text>
+        </View>
+
+        {/* ── Bottom row — only visible on the FRONT card ────────
+            Hidden behind the next card's top edge for any card
+            that isn't at the front, which is fine — this row is
+            secondary info. */}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginTop: 18,
+            paddingTop: 12,
+            borderTopWidth: 1,
+            borderTopColor: 'rgba(255,255,255,0.06)',
+          }}
+        >
+          <AvatarStack items={g.avatars.map((s) => ({ initials: s }))} size={22} max={5} />
+          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.paper2 }}>
+            Toca para entrar ›
+          </Text>
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+}

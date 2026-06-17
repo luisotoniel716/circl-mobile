@@ -1,4 +1,5 @@
 import { View, Image, ViewStyle, ImageStyle, StyleProp } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import Svg, { Polygon } from 'react-native-svg';
 import { Text } from '../design-system';
 import { LIGAMX } from '../data';
@@ -16,11 +17,23 @@ export function TeamCrest({ team, size = 44, style, bare = false }: TeamCrestPro
   const t = typeof team === 'string' ? LIGAMX[team] : team;
   if (!t) return null;
 
+  // Each crest instance independently fades its logo in once the PNG is
+  // decoded. The team-colour background/circle renders immediately so the
+  // card never looks broken.
+  const logoOpacity = useSharedValue(0);
+  const logoAnimStyle = useAnimatedStyle(() => ({ opacity: logoOpacity.value }));
+
   // Bare mode: just the PNG, transparent background — for hero areas where the
   // logo speaks for itself (match detail, pick screen).
   if (bare && t.logo) {
     const bareStyle: ImageStyle = { width: size, height: size, resizeMode: 'contain' };
-    return <Image source={t.logo} style={[bareStyle, style as ImageStyle]} />;
+    return (
+      <Animated.Image
+        source={t.logo}
+        style={[bareStyle, style as ImageStyle, logoAnimStyle]}
+        onLoad={() => { logoOpacity.value = withTiming(1, { duration: 160 }); }}
+      />
+    );
   }
 
   // Framed mode: circle with team colors, logo (or initial) inside.
@@ -42,9 +55,10 @@ export function TeamCrest({ team, size = 44, style, bare = false }: TeamCrestPro
       ]}
     >
       {t.logo ? (
-        <Image
+        <Animated.Image
           source={t.logo}
-          style={{ width: size * 0.78, height: size * 0.78, resizeMode: 'contain' }}
+          style={[{ width: size * 0.78, height: size * 0.78, resizeMode: 'contain' }, logoAnimStyle]}
+          onLoad={() => { logoOpacity.value = withTiming(1, { duration: 160 }); }}
         />
       ) : (
         <>

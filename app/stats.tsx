@@ -1,12 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, Modal, ActivityIndicator } from 'react-native';
 import Svg, {
   Circle, Path, Line, Rect, Text as SvgText, G, Polyline,
 } from 'react-native-svg';
+import Animated, {
+  useSharedValue, useAnimatedProps, withTiming, withDelay, Easing,
+} from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import {
-  ScreenContainer, TopBar, Icon, Text, colors,
+  ScreenContainer, TopBar, Icon, Text, colors, AnimatedNumber,
 } from '../src/components';
 import { LIGAMX } from '../src/data';
 import type { TeamCode } from '../src/types';
@@ -16,23 +19,57 @@ import type { Badge, MatchdaySummary, RecentPick } from '../src/lib/queries';
 
 // ─── DonutChart ────────────────────────────────────────────────
 
+// Reanimated-friendly version of the SVG Circle so we can animate its
+// `strokeDashoffset` on the native side (no per-frame React renders).
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
 function DonutChart({
-  percent, size = 180, stroke = 18, color = colors.gold, trackColor = 'rgba(255,255,255,0.08)',
+  percent, size = 180, stroke = 18, color = colors.gold,
+  trackColor = 'rgba(255,255,255,0.08)',
+  duration = 1100, delay = 0, replayKey,
 }: {
-  percent: number;            // 0-100
-  size?:    number;
-  stroke?:  number;
-  color?:   string;
+  percent:     number;        // 0-100
+  size?:       number;
+  stroke?:     number;
+  color?:      string;
   trackColor?: string;
+  /** Total duration of the fill animation in ms. */
+  duration?:   number;
+  /** Delay before the animation starts. */
+  delay?:      number;
+  /**
+   * Bump to force the donut to "redraw" from 0% even when `percent` is
+   * unchanged — used for the focus-replay pattern in stats.
+   */
+  replayKey?:  string | number;
 }) {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
-  const offset = c * (1 - Math.min(100, Math.max(0, percent)) / 100);
+  const target = Math.min(100, Math.max(0, percent)) / 100;
+
+  // `progress` 0 → 1 drives the dash offset. Starting at 0 means the arc
+  // is fully retracted (no fill); driving to `target` reveals the fraction.
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    // Reset to 0 on mount and every replay so the user always sees the
+    // fill grow from the start.
+    progress.value = 0;
+    progress.value = withDelay(
+      delay,
+      withTiming(target, { duration, easing: Easing.out(Easing.cubic) }),
+    );
+  }, [target, duration, delay, replayKey, progress]);
+
+  const animatedProps = useAnimatedProps(() => ({
+    strokeDashoffset: c * (1 - progress.value),
+  }));
+
   return (
     <Svg width={size} height={size}>
       <G originX={size / 2} originY={size / 2} rotation={-90}>
         <Circle cx={size / 2} cy={size / 2} r={r} stroke={trackColor} strokeWidth={stroke} fill="none" />
-        <Circle
+        <AnimatedCircle
           cx={size / 2}
           cy={size / 2}
           r={r}
@@ -41,7 +78,7 @@ function DonutChart({
           strokeLinecap="round"
           fill="none"
           strokeDasharray={`${c} ${c}`}
-          strokeDashoffset={offset}
+          animatedProps={animatedProps}
         />
       </G>
     </Svg>
@@ -240,6 +277,16 @@ export default function Stats() {
   const [openBadge, setOpenBadge] = useState<Badge | null>(null);
   const [openMatchday, setOpenMatchday] = useState<MatchdaySummary | null>(null);
 
+  // Bumps every time this screen gains focus, so the AnimatedNumber
+  // instances replay their count-up from 0 even though they're already
+  // mounted (Expo Router keeps the screen in memory between visits).
+  const [focusTick, setFocusTick] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      setFocusTick((t) => t + 1);
+    }, []),
+  );
+
   if (isLoading || !stats) {
     return (
       <ScreenContainer theme="dark">
@@ -275,11 +322,20 @@ export default function Stats() {
             <View style={{ paddingHorizontal: 20, paddingTop: 8 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
                 <View style={{ width: 180, height: 180, alignItems: 'center', justifyContent: 'center' }}>
-                  <DonutChart percent={stats.accuracy} color={accentColor} />
+                  <DonutChart
+                    percent={stats.accuracy}
+                    color={accentColor}
+                    duration={1100}
+                    replayKey={focusTick}
+                  />
                   <View style={{ position: 'absolute', alignItems: 'center' }}>
-                    <Text style={{ fontSize: 36, fontWeight: '900', color: colors.paper }}>
-                      {stats.accuracy}%
-                    </Text>
+                    <AnimatedNumber
+                      value={stats.accuracy}
+                      duration={1100}
+                      suffix="%"
+                      replayKey={focusTick}
+                      style={{ fontSize: 36, fontWeight: '900', color: colors.paper }}
+                    />
                     <Text style={{ fontSize: 10, color: colors.mist, fontWeight: '800', marginTop: 2 }}>
                       ACCURACY
                     </Text>
@@ -287,13 +343,58 @@ export default function Stats() {
                 </View>
 
                 <View style={{ flex: 1, gap: 12 }}>
-                  <SideStat label="PUNTOS"  value={stats.totalPoints}  color={colors.gold} />
-                  <SideStat label="ACIERTOS" value={`${stats.correctPicks}/${stats.totalPicks}`} color={colors.paper} />
-                  <SideStat
-                    label="RACHA ACTUAL"
-                    value={`🔥 ${stats.currentStreak}`}
-                    color={stats.currentStreak > 0 ? colors.red : colors.mist}
-                  />
+                  <View>
+                    <Text style={{ fontSize: 10, fontWeight: '800', color: colors.mist }}>PUNTOS</Text>
+                    <AnimatedNumber
+                      value={stats.totalPoints}
+                      duration={1100}
+                      delay={120}
+                      formatLocale
+                      replayKey={focusTick}
+                      style={{ fontSize: 20, fontWeight: '900', color: colors.gold }}
+                    />
+                  </View>
+                  <View>
+                    <Text style={{ fontSize: 10, fontWeight: '800', color: colors.mist }}>ACIERTOS</Text>
+                    <Text style={{ fontSize: 20, fontWeight: '900', color: colors.paper }}>
+                      <AnimatedNumber
+                        value={stats.correctPicks}
+                        duration={1000}
+                        delay={220}
+                        replayKey={focusTick}
+                        style={{ fontSize: 20, fontWeight: '900', color: colors.paper }}
+                      />
+                      /
+                      <AnimatedNumber
+                        value={stats.totalPicks}
+                        duration={1000}
+                        delay={220}
+                        replayKey={focusTick}
+                        style={{ fontSize: 20, fontWeight: '900', color: colors.paper }}
+                      />
+                    </Text>
+                  </View>
+                  <View>
+                    <Text style={{ fontSize: 10, fontWeight: '800', color: colors.mist }}>RACHA ACTUAL</Text>
+                    <Text
+                      style={{
+                        fontSize: 20, fontWeight: '900',
+                        color: stats.currentStreak > 0 ? colors.red : colors.mist,
+                      }}
+                    >
+                      🔥{' '}
+                      <AnimatedNumber
+                        value={stats.currentStreak}
+                        duration={900}
+                        delay={320}
+                        replayKey={focusTick}
+                        style={{
+                          fontSize: 20, fontWeight: '900',
+                          color: stats.currentStreak > 0 ? colors.red : colors.mist,
+                        }}
+                      />
+                    </Text>
+                  </View>
                 </View>
               </View>
             </View>
@@ -477,12 +578,29 @@ export default function Stats() {
                 <RecordRow
                   icon="check"
                   label="Jornadas perfectas"
-                  value={String(stats.perfectMatchdays)}
+                  valueNode={
+                    <AnimatedNumber
+                      value={stats.perfectMatchdays}
+                      duration={900}
+                      delay={420}
+                      replayKey={focusTick}
+                      style={{ fontSize: 13, fontWeight: '900', color: colors.paper }}
+                    />
+                  }
                 />
                 <RecordRow
                   icon="flag"
                   label="Total picks"
-                  value={String(stats.totalPicks)}
+                  valueNode={
+                    <AnimatedNumber
+                      value={stats.totalPicks}
+                      duration={1000}
+                      delay={500}
+                      formatLocale
+                      replayKey={focusTick}
+                      style={{ fontSize: 13, fontWeight: '900', color: colors.paper }}
+                    />
+                  }
                 />
               </View>
             </SectionCard>
@@ -669,12 +787,14 @@ function RecentDot({ pick }: { pick: RecentPick | null }) {
 }
 
 function RecordRow({
-  icon, label, value, onPress,
+  icon, label, value, valueNode, onPress,
 }: {
-  icon:    React.ComponentProps<typeof Icon>['name'];
-  label:   string;
-  value:   string;
-  onPress?: () => void;
+  icon:       React.ComponentProps<typeof Icon>['name'];
+  label:      string;
+  /** Use either `value` (plain text) OR `valueNode` (e.g. <AnimatedNumber />). */
+  value?:     string;
+  valueNode?: React.ReactNode;
+  onPress?:   () => void;
 }) {
   return (
     <Pressable
@@ -695,7 +815,9 @@ function RecordRow({
         <Icon name={icon} size={14} color={colors.paper2} />
       </View>
       <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: colors.paper }}>{label}</Text>
-      <Text style={{ fontSize: 13, fontWeight: '900', color: colors.paper }}>{value}</Text>
+      {valueNode ?? (
+        <Text style={{ fontSize: 13, fontWeight: '900', color: colors.paper }}>{value}</Text>
+      )}
       {onPress && <Icon name="chev" size={14} color={colors.mist} />}
     </Pressable>
   );

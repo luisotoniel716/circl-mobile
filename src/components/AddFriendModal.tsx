@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { View, ScrollView, Pressable, Modal, ActivityIndicator, Alert, TextInput } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Text, colors } from '../design-system';
 import { Avatar } from './Avatar';
 import { Icon } from './Icon';
@@ -39,6 +40,7 @@ interface Props {
  * Entry points: the home header bell-row button and the /friends screen.
  */
 export function AddFriendModal({ visible, onClose }: Props) {
+  const router = useRouter();
   const [q, setQ] = useState('');
   const isSearching = q.trim().length >= 2;
 
@@ -48,6 +50,17 @@ export function AddFriendModal({ visible, onClose }: Props) {
 
   const incoming = requests.filter((r) => r.direction === 'incoming');
   const outgoing = requests.filter((r) => r.direction === 'outgoing');
+
+  // Close the sheet then navigate. With presentationStyle="pageSheet" on iOS,
+  // pushing while the sheet is mounted hides the new screen behind it — close
+  // first so the public profile takes over the full screen.
+  function openProfile(userId: string) {
+    onClose();
+    // Small defer so the modal dismiss animation can start before the push.
+    setTimeout(() => {
+      router.push({ pathname: '/user/[id]', params: { id: userId } });
+    }, 80);
+  }
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -105,7 +118,7 @@ export function AddFriendModal({ visible, onClose }: Props) {
           ) : (
             <ScrollView contentContainerStyle={{ paddingBottom: 30 }}>
               {results.map((u) => (
-                <SearchResultRow key={u.id} user={u} />
+                <SearchResultRow key={u.id} user={u} onOpen={() => openProfile(u.id)} />
               ))}
             </ScrollView>
           )
@@ -119,7 +132,7 @@ export function AddFriendModal({ visible, onClose }: Props) {
                 <>
                   <Text style={sectionLabel}>SOLICITUDES · {incoming.length}</Text>
                   {incoming.map((r) => (
-                    <IncomingRequestRow key={r.friendship_id} req={r} />
+                    <IncomingRequestRow key={r.friendship_id} req={r} onOpen={() => openProfile(r.user.id)} />
                   ))}
                 </>
               ) : null}
@@ -128,7 +141,7 @@ export function AddFriendModal({ visible, onClose }: Props) {
                 <>
                   <Text style={sectionLabel}>ENVIADAS · {outgoing.length}</Text>
                   {outgoing.map((r) => (
-                    <OutgoingRequestRow key={r.friendship_id} req={r} />
+                    <OutgoingRequestRow key={r.friendship_id} req={r} onOpen={() => openProfile(r.user.id)} />
                   ))}
                 </>
               ) : null}
@@ -141,7 +154,7 @@ export function AddFriendModal({ visible, onClose }: Props) {
                   </Text>
                 </View>
               ) : (
-                friends.map((f) => <FriendRowItem key={f.friendship_id} f={f} />)
+                friends.map((f) => <FriendRowItem key={f.friendship_id} f={f} onOpen={() => openProfile(f.user.id)} />)
               )}
             </ScrollView>
           )
@@ -153,7 +166,7 @@ export function AddFriendModal({ visible, onClose }: Props) {
 
 // ─── Rows ────────────────────────────────────────────────────
 
-function SearchResultRow({ user }: { user: ProfileMini }) {
+function SearchResultRow({ user, onOpen }: { user: ProfileMini; onOpen: () => void }) {
   const { user: me } = useAuth();
   const { data: status, isLoading } = useFriendshipStatus(user.id);
   const send = useSendFriendRequest();
@@ -193,27 +206,49 @@ function SearchResultRow({ user }: { user: ProfileMini }) {
 
   return (
     <View style={rowStyle}>
-      <Avatar initials={initialsOf(user.name)} size={40} bg={colors.s700} imageUrl={user.avatar_url} />
-      <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 14, fontWeight: '800', color: colors.paper }}>{user.name}</Text>
-        <Text style={{ fontSize: 12, color: colors.mist }}>@{user.username}</Text>
-      </View>
+      <Pressable
+        onPress={onOpen}
+        style={({ pressed }) => ({
+          flex: 1,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
+          opacity: pressed ? 0.7 : 1,
+        })}
+      >
+        <Avatar initials={initialsOf(user.name)} size={40} bg={colors.s700} imageUrl={user.avatar_url} />
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 14, fontWeight: '800', color: colors.paper }}>{user.name}</Text>
+          <Text style={{ fontSize: 12, color: colors.mist }}>@{user.username}</Text>
+        </View>
+      </Pressable>
       {trail}
     </View>
   );
 }
 
-function IncomingRequestRow({ req }: { req: FriendRequestRow }) {
+function IncomingRequestRow({ req, onOpen }: { req: FriendRequestRow; onOpen: () => void }) {
   const accept = useAcceptFriendRequest();
   const remove = useRemoveFriendship();
 
   return (
     <View style={rowStyle}>
-      <Avatar initials={initialsOf(req.user.name)} size={40} bg={colors.blue} imageUrl={req.user.avatar_url} />
-      <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 14, fontWeight: '800', color: colors.paper }}>{req.user.name}</Text>
-        <Text style={{ fontSize: 12, color: colors.mist }}>@{req.user.username}</Text>
-      </View>
+      <Pressable
+        onPress={onOpen}
+        style={({ pressed }) => ({
+          flex: 1,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
+          opacity: pressed ? 0.7 : 1,
+        })}
+      >
+        <Avatar initials={initialsOf(req.user.name)} size={40} bg={colors.blue} imageUrl={req.user.avatar_url} />
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 14, fontWeight: '800', color: colors.paper }}>{req.user.name}</Text>
+          <Text style={{ fontSize: 12, color: colors.mist }}>@{req.user.username}</Text>
+        </View>
+      </Pressable>
       <CButton
         variant="soft"
         size="sm"
@@ -236,16 +271,27 @@ function IncomingRequestRow({ req }: { req: FriendRequestRow }) {
   );
 }
 
-function OutgoingRequestRow({ req }: { req: FriendRequestRow }) {
+function OutgoingRequestRow({ req, onOpen }: { req: FriendRequestRow; onOpen: () => void }) {
   const remove = useRemoveFriendship();
 
   return (
     <View style={rowStyle}>
-      <Avatar initials={initialsOf(req.user.name)} size={40} bg={colors.s700} imageUrl={req.user.avatar_url} />
-      <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 14, fontWeight: '800', color: colors.paper }}>{req.user.name}</Text>
-        <Text style={{ fontSize: 12, color: colors.mist }}>@{req.user.username} · enviada</Text>
-      </View>
+      <Pressable
+        onPress={onOpen}
+        style={({ pressed }) => ({
+          flex: 1,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
+          opacity: pressed ? 0.7 : 1,
+        })}
+      >
+        <Avatar initials={initialsOf(req.user.name)} size={40} bg={colors.s700} imageUrl={req.user.avatar_url} />
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 14, fontWeight: '800', color: colors.paper }}>{req.user.name}</Text>
+          <Text style={{ fontSize: 12, color: colors.mist }}>@{req.user.username} · enviada</Text>
+        </View>
+      </Pressable>
       <CButton
         variant="soft"
         size="sm"
@@ -259,7 +305,7 @@ function OutgoingRequestRow({ req }: { req: FriendRequestRow }) {
   );
 }
 
-function FriendRowItem({ f }: { f: FriendRow }) {
+function FriendRowItem({ f, onOpen }: { f: FriendRow; onOpen: () => void }) {
   const remove = useRemoveFriendship();
 
   function confirmRemove() {
@@ -281,11 +327,22 @@ function FriendRowItem({ f }: { f: FriendRow }) {
 
   return (
     <View style={rowStyle}>
-      <Avatar initials={initialsOf(f.user.name)} size={40} bg={colors.s700} imageUrl={f.user.avatar_url} />
-      <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 14, fontWeight: '800', color: colors.paper }}>{f.user.name}</Text>
-        <Text style={{ fontSize: 12, color: colors.mist }}>@{f.user.username}</Text>
-      </View>
+      <Pressable
+        onPress={onOpen}
+        style={({ pressed }) => ({
+          flex: 1,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
+          opacity: pressed ? 0.7 : 1,
+        })}
+      >
+        <Avatar initials={initialsOf(f.user.name)} size={40} bg={colors.s700} imageUrl={f.user.avatar_url} />
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 14, fontWeight: '800', color: colors.paper }}>{f.user.name}</Text>
+          <Text style={{ fontSize: 12, color: colors.mist }}>@{f.user.username}</Text>
+        </View>
+      </Pressable>
       <Pressable
         onPress={confirmRemove}
         hitSlop={8}

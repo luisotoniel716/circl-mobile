@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
-import { View, ScrollView, ActivityIndicator } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ScreenContainer, TopBar, Section, Avatar, Pill, Icon, Text, colors,
 } from '../../../src/components';
@@ -14,6 +14,7 @@ function initialsOf(name?: string | null) {
 
 export default function GroupMembers() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const { user } = useAuth();
   const { data: group } = useGroup(id);
   const { data: members = [], isLoading } = useGroupMembers(id);
@@ -51,6 +52,12 @@ export default function GroupMembers() {
                   m={m}
                   me={m.user_id === user?.id}
                   groupAccent={group?.accent ?? colors.s700}
+                  onPress={() => {
+                    // Tapping yourself does nothing — your own row lives in
+                    // the Profile tab. Other members open the public profile.
+                    if (m.user_id === user?.id) return;
+                    router.push({ pathname: '/user/[id]', params: { id: m.user_id } });
+                  }}
                 />
               ))}
             </Section>
@@ -67,6 +74,12 @@ export default function GroupMembers() {
                   m={m}
                   me={m.user_id === user?.id}
                   groupAccent={group?.accent ?? colors.s700}
+                  onPress={() => {
+                    // Tapping yourself does nothing — your own row lives in
+                    // the Profile tab. Other members open the public profile.
+                    if (m.user_id === user?.id) return;
+                    router.push({ pathname: '/user/[id]', params: { id: m.user_id } });
+                  }}
                 />
               ))
             )}
@@ -78,11 +91,23 @@ export default function GroupMembers() {
 }
 
 function MemberRow({
-  m, me, groupAccent,
-}: { m: GroupMember; me: boolean; groupAccent: string }) {
+  m, me, groupAccent, onPress,
+}: { m: GroupMember; me: boolean; groupAccent: string; onPress?: () => void }) {
   const tint = m.role === 'admin' ? colors.gold : colors.mist;
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)' }}>
+    <Pressable
+      onPress={onPress}
+      disabled={me}
+      style={({ pressed }) => ({
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(255,255,255,0.04)',
+        opacity: pressed && !me ? 0.7 : 1,
+      })}
+    >
       <Avatar initials={initialsOf(m.profile?.name)} size={40} bg={groupAccent} imageUrl={m.profile?.avatar_url} />
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -96,6 +121,7 @@ function MemberRow({
       <View style={{ backgroundColor: tint + '22', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 9999 }}>
         <Text style={{ fontSize: 10, fontWeight: '800', color: tint, textTransform: 'uppercase' }}>{m.role}</Text>
       </View>
-    </View>
+      {!me ? <Icon name="chev" size={14} color={colors.mist} /> : null}
+    </Pressable>
   );
 }

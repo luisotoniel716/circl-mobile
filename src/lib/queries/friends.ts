@@ -112,6 +112,35 @@ export function useFriendRequests() {
   });
 }
 
+// ─── Friendship row with another user ───────────────────────
+
+/**
+ * Fetch the friendship row (id + status) between the current user and
+ * another user, if one exists. Needed by screens that want to act on the
+ * friendship (accept / remove) without bouncing through the friends list.
+ */
+export function useFriendshipWith(otherId: string | undefined) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ['friendship-with', user?.id ?? null, otherId ?? null],
+    enabled: !!user && !!otherId && otherId !== user.id,
+    queryFn: async (): Promise<{ id: string; status: string; requester: string } | null> => {
+      const { data, error } = await supabase
+        .from('friendships')
+        .select('id, status, requester, addressee')
+        .or(
+          // Either we requested them, or they requested us.
+          `and(requester.eq.${user!.id},addressee.eq.${otherId!}),` +
+          `and(requester.eq.${otherId!},addressee.eq.${user!.id})`,
+        )
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
+      return { id: data.id, status: data.status, requester: data.requester };
+    },
+  });
+}
+
 // ─── Friendship status with another user ─────────────────────
 
 export function useFriendshipStatus(otherId: string | undefined) {
@@ -151,6 +180,7 @@ function invalidateFriendCaches(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['friends'] });
   qc.invalidateQueries({ queryKey: ['friend-requests'] });
   qc.invalidateQueries({ queryKey: ['friendship-status'] });
+  qc.invalidateQueries({ queryKey: ['friendship-with'] });
   qc.invalidateQueries({ queryKey: ['notifications'] });
 }
 

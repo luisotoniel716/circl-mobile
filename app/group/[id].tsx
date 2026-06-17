@@ -3,6 +3,7 @@ import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator, Share, Mo
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
+import Animated, { FadeInDown, Easing } from 'react-native-reanimated';
 import {
   ScreenContainer, TopBar, Section, CButton, Avatar, MatchRow, Icon, Text, colors,
 } from '../../src/components';
@@ -118,12 +119,6 @@ export default function GroupDetail() {
     }
   }
 
-  async function handleCopyCode() {
-    if (!group) return;
-    await Clipboard.setStringAsync(group.invite_code);
-    Alert.alert('Copiado', `Código ${group.invite_code} copiado al portapapeles.`);
-  }
-
   return (
     <ScreenContainer theme="dark">
       <TopBar
@@ -198,36 +193,75 @@ export default function GroupDetail() {
                 </CButton>
               </View>
             </View>
-          </LinearGradient>
-        </View>
 
-        {/* Invite code card */}
-        <View style={{ paddingHorizontal: 20, paddingBottom: 8 }}>
-          <Pressable
-            onPress={handleCopyCode}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 12,
-              backgroundColor: colors.s800,
-              borderWidth: 1,
-              borderColor: 'rgba(255,255,255,0.06)',
-              borderRadius: 14,
-              paddingHorizontal: 14,
-              paddingVertical: 12,
-            }}
-          >
-            <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center' }}>
-              <Icon name="qr" size={18} color={colors.paper} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 11, color: colors.mist, fontWeight: '700' }}>CÓDIGO DE INVITACIÓN</Text>
-              <Text style={{ fontSize: 17, fontWeight: '900', color: colors.paper, letterSpacing: 2, marginTop: 2 }}>
-                {group.invite_code}
-              </Text>
-            </View>
-            <Text style={{ fontSize: 11, fontWeight: '800', color: colors.paper2 }}>TOCA{'\n'}PARA COPIAR</Text>
-          </Pressable>
+            {/* Members preview row — promoted from the bottom of the screen
+                into the hero card so the group "feels alive" at first glance.
+                Tapping anywhere on the strip opens the Circle wheel where
+                the full member list lives. The avatar overlap + count chip
+                pattern keeps the strip compact even with bigger groups. */}
+            {!membersLoading && members.length > 0 ? (
+              <Pressable
+                onPress={() => router.push({ pathname: '/group/[id]/circle', params: { id: group.id } })}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                  marginTop: 12,
+                  paddingTop: 12,
+                  borderTopWidth: 1,
+                  borderTopColor: 'rgba(255,255,255,0.18)',
+                }}
+              >
+                <View style={{ flexDirection: 'row' }}>
+                  {members.slice(0, 4).map((m, i) => (
+                    <View
+                      key={m.user_id}
+                      style={{
+                        marginLeft: i === 0 ? 0 : -10,
+                        // White border so overlapping avatars read as
+                        // separate disks even when crests/photos blend.
+                        borderWidth: 2,
+                        borderColor: colors.paper,
+                        borderRadius: 16,
+                      }}
+                    >
+                      <Avatar
+                        initials={initialsOf(m.profile?.name)}
+                        size={28}
+                        bg={group.accent}
+                        imageUrl={m.profile?.avatar_url}
+                      />
+                    </View>
+                  ))}
+                  {members.length > 4 ? (
+                    <View
+                      style={{
+                        marginLeft: -10,
+                        width: 28,
+                        height: 28,
+                        borderRadius: 14,
+                        backgroundColor: 'rgba(255,255,255,0.22)',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderWidth: 2,
+                        borderColor: colors.paper,
+                      }}
+                    >
+                      <Text style={{ fontSize: 10, fontWeight: '900', color: colors.paper }}>
+                        +{members.length - 4}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={{ flex: 1, fontSize: 11, fontWeight: '700', color: colors.paper, opacity: 0.85 }}>
+                  {members.length} {members.length === 1 ? 'miembro' : 'miembros'}
+                </Text>
+                <Text style={{ fontSize: 11, fontWeight: '800', color: colors.paper, opacity: 0.85 }}>
+                  Ver todos ›
+                </Text>
+              </Pressable>
+            ) : null}
+          </LinearGradient>
         </View>
 
         {/* Podium */}
@@ -263,25 +297,41 @@ export default function GroupDetail() {
                     style={{
                       flex: 1,
                       backgroundColor: colors.s800,
-                      borderRadius: 14,
-                      paddingVertical: 12,
-                      paddingHorizontal: 8,
+                      borderRadius: 12,
+                      paddingVertical: 8,
+                      paddingHorizontal: 6,
                       borderWidth: me ? 1.5 : 1,
                       borderColor: me ? colors.gold : 'rgba(255,255,255,0.04)',
                       alignItems: 'center',
-                      marginTop: 8,
+                      marginTop: 7,
                     }}
                   >
-                    <View style={{ position: 'absolute', top: -8, width: 24, height: 24, borderRadius: 12, backgroundColor: gold ? colors.gold : 'rgba(255,255,255,0.10)', alignItems: 'center', justifyContent: 'center' }}>
-                      <Text style={{ fontSize: 10, fontWeight: '900', color: gold ? colors.ink : colors.paper }}>{icon}</Text>
+                    {/* Rank pill above the card. The previous pill used a
+                        semi-transparent white background — the "me" card's
+                        gold border showed through, making it look like the
+                        border was on top. Opaque background (s900) covers
+                        the border cleanly. Lifted with zIndex too. */}
+                    <View
+                      style={{
+                        position: 'absolute', top: -8,
+                        width: 22, height: 22, borderRadius: 11,
+                        backgroundColor: gold ? colors.gold : colors.s900,
+                        borderWidth: gold ? 0 : 1.5,
+                        borderColor: 'rgba(255,255,255,0.18)',
+                        alignItems: 'center', justifyContent: 'center',
+                        zIndex: 10,
+                        elevation: 10,
+                      }}
+                    >
+                      <Text style={{ fontSize: 9, fontWeight: '900', color: gold ? colors.ink : colors.paper }}>{icon}</Text>
                     </View>
-                    <View style={{ marginTop: 6 }}>
-                      <Avatar initials={initialsOf(m.profile?.name)} size={36} bg={group.accent} imageUrl={m.profile?.avatar_url} />
+                    <View style={{ marginTop: 4 }}>
+                      <Avatar initials={initialsOf(m.profile?.name)} size={32} bg={group.accent} imageUrl={m.profile?.avatar_url} />
                     </View>
-                    <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: '800', marginTop: 4, color: colors.paper }}>
+                    <Text numberOfLines={1} style={{ fontSize: 11.5, fontWeight: '800', marginTop: 3, color: colors.paper }}>
                       {me ? 'You' : (m.profile?.name?.split(' ')[0] ?? '—')}
                     </Text>
-                    <Text style={{ fontSize: 11, color: colors.gold, fontWeight: '800' }}>{m.points} pts</Text>
+                    <Text style={{ fontSize: 10.5, color: colors.gold, fontWeight: '800' }}>{m.points} pts</Text>
                   </View>
                 );
               })}
@@ -366,29 +416,40 @@ export default function GroupDetail() {
             </Text>
           ) : (
             <View style={{ gap: 8 }}>
-              {filteredMatches.slice(0, 10).map((m) =>
-                matchChip === 'upcoming' ? (
-                  <MatchRow
-                    key={m.id}
-                    m={m}
-                    onPress={() =>
-                      router.push({
-                        pathname: '/match/[id]',
-                        params: { id: m.id, groupId: group.id },
-                      })
-                    }
-                  />
-                ) : (
-                  <ResultRow
-                    key={m.id}
-                    match={m}
-                    pick={myPicks[m.id]}
-                    onPress={() =>
-                      router.push({ pathname: '/match/[id]', params: { id: m.id, groupId: group.id } })
-                    }
-                  />
-                ),
-              )}
+              {filteredMatches.slice(0, 10).map((m, i) => (
+                <Animated.View
+                  // `matchChip` is part of the key so switching between
+                  // Próximos/Resultados forces a fresh mount → the cards
+                  // re-stagger from the new list instead of swapping
+                  // in-place. Same pattern as the home tab — keeps the
+                  // animation feeling identical across screens.
+                  key={`${matchChip}-${m.id}`}
+                  entering={FadeInDown
+                    .delay(Math.min(i, 8) * 55)
+                    .duration(420)
+                    .easing(Easing.out(Easing.cubic))}
+                >
+                  {matchChip === 'upcoming' ? (
+                    <MatchRow
+                      m={m}
+                      onPress={() =>
+                        router.push({
+                          pathname: '/match/[id]',
+                          params: { id: m.id, groupId: group.id },
+                        })
+                      }
+                    />
+                  ) : (
+                    <ResultRow
+                      match={m}
+                      pick={myPicks[m.id]}
+                      onPress={() =>
+                        router.push({ pathname: '/match/[id]', params: { id: m.id, groupId: group.id } })
+                      }
+                    />
+                  )}
+                </Animated.View>
+              ))}
             </View>
           )}
         </View>
@@ -564,40 +625,6 @@ export default function GroupDetail() {
           </View>
         </Modal>
 
-        {/* Members preview */}
-        <Section
-          title={`MIEMBROS (${members.length})`}
-          action={
-            <Text
-              onPress={() => router.push({ pathname: '/group/[id]/members', params: { id: group.id } })}
-              style={{ fontSize: 11, fontWeight: '700', color: colors.paper2 }}
-            >
-              Ver todos ›
-            </Text>
-          }
-        >
-          <View style={{ gap: 4 }}>
-            {members.slice(0, 5).map((m) => {
-              const me = m.user_id === user?.id;
-              return (
-                <View key={m.user_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 }}>
-                  <Avatar initials={initialsOf(m.profile?.name)} size={34} bg={group.accent} imageUrl={m.profile?.avatar_url} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 13.5, fontWeight: '800', color: colors.paper }}>
-                      {me ? 'You' : (m.profile?.name ?? '—')}
-                    </Text>
-                    <Text style={{ fontSize: 11, color: colors.mist }}>@{m.profile?.username ?? '—'}</Text>
-                  </View>
-                  {m.role === 'admin' ? (
-                    <View style={{ backgroundColor: colors.gold + '22', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 9999 }}>
-                      <Text style={{ fontSize: 10, fontWeight: '800', color: colors.gold }}>ADMIN</Text>
-                    </View>
-                  ) : null}
-                </View>
-              );
-            })}
-          </View>
-        </Section>
       </ScrollView>
     </ScreenContainer>
   );

@@ -17,6 +17,8 @@ export { DateTimeField } from './DateTimeField';
 export { InviteFriendsModal } from './InviteFriendsModal';
 export { AddFriendModal } from './AddFriendModal';
 export { FriendPickerModal } from './FriendPickerModal';
+export { AnimatedNumber } from './AnimatedNumber';
+export { CreateGroupSuccess, type OrbitMember } from './CreateGroupSuccess';
 
 // Re-export the themed Text + tokens so screens import from one place.
 export { Text, colors, spacing, radius, fontSize, shadow } from '../design-system';

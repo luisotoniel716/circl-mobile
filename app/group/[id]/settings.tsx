@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import {
   ScreenContainer, TopBar, Section, CButton, Avatar, Input, Icon, Text, colors,
   InviteFriendsModal,
@@ -333,8 +334,14 @@ export default function GroupSettings() {
               <Icon name="chev" size={16} color={colors.mist} />
             </Pressable>
 
-            {/* Also expose the invite code for easy sharing */}
-            <View
+            {/* Invite code — tappable to copy. Moved here from the group
+                detail screen so the hero card can lead with the social
+                content (rank + members) instead of admin metadata. */}
+            <Pressable
+              onPress={async () => {
+                await Clipboard.setStringAsync(group.invite_code);
+                Alert.alert('Copiado', `Código ${group.invite_code} copiado al portapapeles.`);
+              }}
               style={{
                 marginTop: 8,
                 padding: 12,
@@ -362,7 +369,10 @@ export default function GroupSettings() {
               >
                 {group.invite_code}
               </Text>
-            </View>
+              <Text style={{ fontSize: 10, fontWeight: '800', color: colors.paper2, opacity: 0.8 }}>
+                COPIAR
+              </Text>
+            </Pressable>
           </View>
 
           {/* ── Members ────────────────────────────────── */}

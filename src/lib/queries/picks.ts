@@ -64,6 +64,47 @@ export function useMyPicksForMatch(matchId: string | undefined) {
 }
 
 /**
+ * All picks for a specific match within a group, keyed by user_id.
+ * Includes the result info if the match has finished. Used by the
+ * circle (wheel) view to compare any member's pick to the current user.
+ *
+ * Note: Supabase RLS hides other users' picks until kickoff, so the
+ * returned map only reflects rows the current user can actually see —
+ * before kickoff this is just the user's own pick.
+ */
+export function useMatchPicksInGroup(
+  matchId: string | undefined,
+  groupId: string | undefined,
+) {
+  return useQuery({
+    queryKey: ['match-picks-in-group', matchId, groupId],
+    enabled: !!matchId && !!groupId,
+    queryFn: async (): Promise<Record<string, PickWithResult>> => {
+      const { data, error } = await supabase
+        .from('picks')
+        .select('user_id, prediction, pick_results ( correct, points )')
+        .eq('match_id', matchId!)
+        .eq('group_id', groupId!);
+      if (error) throw error;
+      const out: Record<string, PickWithResult> = {};
+      for (const row of (data ?? []) as Array<{
+        user_id:    string;
+        prediction: string;
+        pick_results: { correct: boolean; points: number } | { correct: boolean; points: number }[] | null;
+      }>) {
+        const pr = Array.isArray(row.pick_results) ? row.pick_results[0] : row.pick_results;
+        out[row.user_id] = {
+          prediction: row.prediction as Prediction,
+          correct:    pr?.correct ?? null,
+          points:     pr?.points  ?? 0,
+        };
+      }
+      return out;
+    },
+  });
+}
+
+/**
  * Pick distribution for a match in a group.
  * Supabase RLS only returns rows after kickoff (or for own picks),
  * so before kickoff totals will reflect only the current user's pick.

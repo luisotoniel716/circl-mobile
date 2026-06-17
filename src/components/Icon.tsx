@@ -80,7 +80,11 @@ export function Icon({ name, size = 22, color = colors.paper, stroke = 2, fill =
     case 'trophy':
       return <Svg {...common}><Path d="M8 21h8" /><Path d="M12 17v4" /><Path d="M7 3h10v6a5 5 0 0 1-10 0z" /><Path d="M3 5h4v3a3 3 0 0 1-4 0z" /><Path d="M21 5h-4v3a3 3 0 0 0 4 0z" /></Svg>;
     case 'star':
-      return <Svg {...common} fill={color}><Polygon points="12 2 15 9 22 10 17 15 18 22 12 19 6 22 7 15 2 10 9 9" /></Svg>;
+      // Star now respects the `fill` prop so callers can render an
+      // outlined star (default, fill="none") or a filled one by passing
+      // a colour explicitly. Previously this case hard-coded the fill to
+      // the stroke colour which made it impossible to draw an empty star.
+      return <Svg {...common}><Polygon points="12 2 15 9 22 10 17 15 18 22 12 19 6 22 7 15 2 10 9 9" /></Svg>;
     case 'settings':
       return <Svg {...common}><Circle cx={12} cy={12} r={3} /><Path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1A1.7 1.7 0 0 0 15 4.6a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></Svg>;
     case 'edit':

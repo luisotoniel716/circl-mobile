@@ -1,8 +1,9 @@
+import { useCallback, useState } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator, Share } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import {
-  ScreenContainer, CButton, Avatar, GroupIcon, Icon, Text, colors,
+  ScreenContainer, CButton, Avatar, Icon, Text, colors, AnimatedNumber,
 } from '../../src/components';
 import { useAccent } from '../../src/lib/tweaks';
 import { useAuth } from '../../src/lib/auth';
@@ -26,6 +27,14 @@ export default function Profile() {
 
   const { data: groups = [],                 isLoading: groupsLoading } = useMyGroups();
   const { data: stats,   isLoading: statsLoading  } = useMyStats();
+
+  // Replay AnimatedNumber count-ups every time the tab gains focus.
+  const [focusTick, setFocusTick] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      setFocusTick((t) => t + 1);
+    }, []),
+  );
 
   const initials    = initialsOf(profile?.name);
   const displayName = profile?.name ?? '—';
@@ -60,26 +69,16 @@ export default function Profile() {
 
         {/* ── Hero ──────────────────────────────────────── */}
         <View style={{ alignItems: 'center', paddingHorizontal: 20, paddingTop: 4, paddingBottom: 18 }}>
+          {/* Avatar — no edit ring/button overlay. The dedicated "Edit profile"
+              CButton below handles the same destination, so the overlay was
+              redundant. */}
           <View style={{ marginBottom: 14 }}>
             <Avatar
               initials={initials}
               size={92}
               bg={accentColor}
-              ring
               imageUrl={profile?.avatar_url}
             />
-            <Pressable
-              onPress={() => router.push('/edit-profile')}
-              style={{
-                position: 'absolute', bottom: -2, right: -2,
-                width: 30, height: 30, borderRadius: 15,
-                backgroundColor: colors.paper,
-                borderWidth: 2, borderColor: colors.s900,
-                alignItems: 'center', justifyContent: 'center',
-              }}
-            >
-              <Icon name="edit" size={14} color={colors.ink} />
-            </Pressable>
           </View>
 
           <Text style={{ fontSize: 22, fontWeight: '900', color: colors.paper }}>{displayName}</Text>
@@ -124,9 +123,13 @@ export default function Profile() {
                     <Text style={{ fontSize: 11, fontWeight: '800', color: colors.paper, opacity: 0.85 }}>
                       SEASON · APERTURA 2025
                     </Text>
-                    <Text style={{ fontSize: 38, fontWeight: '900', color: colors.paper, marginTop: 4 }}>
-                      {stats?.totalPoints ?? 0}
-                    </Text>
+                    <AnimatedNumber
+                      value={stats?.totalPoints ?? 0}
+                      duration={1000}
+                      formatLocale
+                      replayKey={focusTick}
+                      style={{ fontSize: 38, fontWeight: '900', color: colors.paper, marginTop: 4 }}
+                    />
                     <Text style={{ fontSize: 12, color: colors.paper, opacity: 0.85 }}>
                       puntos totales
                     </Text>
@@ -147,15 +150,35 @@ export default function Profile() {
                 >
                   <View>
                     <Text style={{ fontSize: 10, fontWeight: '800', color: colors.paper, opacity: 0.75 }}>ACCURACY</Text>
-                    <Text style={{ fontSize: 20, fontWeight: '900', color: colors.paper }}>
-                      {stats?.accuracy ?? 0}%
-                    </Text>
+                    <AnimatedNumber
+                      value={stats?.accuracy ?? 0}
+                      duration={900}
+                      delay={120}
+                      suffix="%"
+                      replayKey={focusTick}
+                      style={{ fontSize: 20, fontWeight: '900', color: colors.paper }}
+                    />
                   </View>
                   <View>
                     <Text style={{ fontSize: 10, fontWeight: '800', color: colors.paper, opacity: 0.75 }}>PICKS</Text>
                     <Text style={{ fontSize: 20, fontWeight: '900', color: colors.paper }}>
-                      {stats?.correctPicks ?? 0}
-                      <Text style={{ fontSize: 14, opacity: 0.75 }}>/{stats?.totalPicks ?? 0}</Text>
+                      <AnimatedNumber
+                        value={stats?.correctPicks ?? 0}
+                        duration={900}
+                        delay={200}
+                        replayKey={focusTick}
+                        style={{ fontSize: 20, fontWeight: '900', color: colors.paper }}
+                      />
+                      <Text style={{ fontSize: 14, opacity: 0.75 }}>
+                        /
+                        <AnimatedNumber
+                          value={stats?.totalPicks ?? 0}
+                          duration={900}
+                          delay={200}
+                          replayKey={focusTick}
+                          style={{ fontSize: 14, fontWeight: '900', color: colors.paper, opacity: 0.75 }}
+                        />
+                      </Text>
                     </Text>
                   </View>
                   {bestRankEntry && (
@@ -163,9 +186,14 @@ export default function Profile() {
                       <Text style={{ fontSize: 10, fontWeight: '800', color: colors.paper, opacity: 0.75 }}>
                         BEST RANK
                       </Text>
-                      <Text style={{ fontSize: 20, fontWeight: '900', color: colors.paper }}>
-                        #{bestRankEntry.myRank}
-                      </Text>
+                      <AnimatedNumber
+                        value={bestRankEntry.myRank}
+                        duration={900}
+                        delay={280}
+                        prefix="#"
+                        replayKey={focusTick}
+                        style={{ fontSize: 20, fontWeight: '900', color: colors.paper }}
+                      />
                       <Text numberOfLines={1} style={{ fontSize: 10, color: colors.paper, opacity: 0.65, maxWidth: 90 }}>
                         {bestRankEntry.name}
                       </Text>
@@ -175,76 +203,6 @@ export default function Profile() {
               </>
             )}
           </LinearGradient>
-        </View>
-
-        {/* ── Active groups ─────────────────────────────── */}
-        <View style={{ paddingHorizontal: 20, paddingBottom: 8 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-            <Text style={{ fontSize: 13, fontWeight: '800', color: colors.paper2, flex: 1 }}>
-              MIS CIRCLS
-            </Text>
-            <Text
-              onPress={() => router.push('/(tabs)/groups')}
-              style={{ fontSize: 11, fontWeight: '700', color: colors.paper2 }}
-            >
-              Ver todos ›
-            </Text>
-          </View>
-
-          {groupsLoading ? (
-            <ActivityIndicator color={colors.paper2} />
-          ) : groups.length === 0 ? (
-            <Pressable
-              onPress={() => router.push('/(tabs)/groups')}
-              style={{
-                padding: 16,
-                borderRadius: 14,
-                backgroundColor: colors.s800,
-                borderWidth: 1,
-                borderColor: 'rgba(255,255,255,0.06)',
-                borderStyle: 'dashed',
-                alignItems: 'center',
-              }}
-            >
-              <Text style={{ color: colors.paper2, fontSize: 13 }}>
-                Aún no tienes grupos — crea uno ›
-              </Text>
-            </Pressable>
-          ) : (
-            <View style={{ gap: 8 }}>
-              {groups.map((g) => (
-                <Pressable
-                  key={g.id}
-                  onPress={() => router.push({ pathname: '/group/[id]', params: { id: g.id } })}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 12,
-                    backgroundColor: colors.s800,
-                    borderRadius: 14,
-                    padding: 12,
-                    borderWidth: 1,
-                    borderColor: 'rgba(255,255,255,0.04)',
-                    borderLeftWidth: 3,
-                    borderLeftColor: g.accent,
-                  }}
-                >
-                  <GroupIcon imageUrl={g.image_url} emoji={g.icon} accent={g.accent} size={36} radius={10} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '800', color: colors.paper }}>{g.name}</Text>
-                    <Text style={{ fontSize: 11, color: colors.mist }}>
-                      #{g.myRank} de {g.members} miembros
-                    </Text>
-                  </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={{ fontSize: 16, fontWeight: '900', color: colors.gold }}>{g.myPts}</Text>
-                    <Text style={{ fontSize: 10, color: colors.mist, fontWeight: '700' }}>pts</Text>
-                  </View>
-                  <Icon name="chev" size={14} color={colors.mist} />
-                </Pressable>
-              ))}
-            </View>
-          )}
         </View>
 
         {/* ── Detail links ──────────────────────────────── */}
@@ -262,8 +220,14 @@ export default function Profile() {
             {[
               {
                 icon: 'trend' as const,
-                label: 'Full statistics',
+                label: 'Estadísticas completas',
                 sub: `${stats?.accuracy ?? 0}% accuracy · ${stats?.totalPicks ?? 0} picks totales`,
+                to: '/stats',
+              },
+              {
+                icon: 'trophy' as const,
+                label: 'Insignias',
+                sub: 'Logros desbloqueados y por desbloquear',
                 to: '/stats',
               },
               {
@@ -273,12 +237,6 @@ export default function Profile() {
                   ? `Mejor rank: #${bestRankEntry.myRank} · ${bestRankEntry.name}`
                   : 'Únete a un grupo para competir',
                 to: '/(tabs)/groups' as const,
-              },
-              {
-                icon: 'flag' as const,
-                label: `Liga MX · ${stats?.totalPicks ?? 0} picks`,
-                sub: `${stats?.correctPicks ?? 0} correctos · ${stats?.accuracy ?? 0}% de acierto`,
-                to: '/stats',
               },
             ].map((r, i, arr) => (
               <Pressable
