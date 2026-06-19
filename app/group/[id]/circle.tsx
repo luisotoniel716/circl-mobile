@@ -8,13 +8,14 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue, useAnimatedStyle, withSpring, withTiming, withSequence, withDelay,
   runOnJS, interpolateColor, Easing,
-  FadeIn, FadeOut,
+  FadeIn, FadeOut, FadeInDown,
   type SharedValue,
 } from 'react-native-reanimated';
 import Svg, { Circle as SvgCircle, Path } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ScreenContainer, TopBar, Avatar, TeamCrest, Icon, Text, colors,
+  MatchPicksSheet,
 } from '../../../src/components';
 import { useAuth } from '../../../src/lib/auth';
 import { useAccent } from '../../../src/lib/tweaks';
@@ -252,6 +253,59 @@ export default function GroupCircle() {
     setExpandedMatchId((prev) => (prev === matchId ? null : matchId));
   }
 
+  // ── View mode (Por persona / Por partido) ────────────────────
+  // "person" → wheel is visible and tapping a match expands it inline,
+  //             comparing the focused member's pick to mine.
+  // "match"  → wheel collapses upward and tapping a match opens a
+  //             bottom sheet with EVERY member's pick for that match.
+  const [viewMode, setViewMode] = useState<'person' | 'match'>('person');
+  const [sheetMatchId, setSheetMatchId] = useState<string | null>(null);
+
+  // Drives the collapse of the hero (focused-member header + wheel).
+  // 0 = fully expanded (person mode), 1 = collapsed (match mode).
+  // We use timing here, not spring — going to 0 with a spring would
+  // overshoot below 0 and read as a "snap" against the TopBar.
+  const heroCollapse = useSharedValue(0);
+  useEffect(() => {
+    heroCollapse.value = withTiming(viewMode === 'match' ? 1 : 0, {
+      duration: 420,
+      easing: Easing.inOut(Easing.cubic),
+    });
+  }, [viewMode, heroCollapse]);
+
+  // Hero block height — estimated from layout: paddingTop(8) + header(46)
+  // + wheel margin(4) + wheel(~260) ≈ 318. We pad to 340 so the collapse
+  // never clips content during the animation window. The header is now
+  // shorter because the "Ver perfil" button moved inside the wheel.
+  const HERO_H = 340;
+  const heroStyle = useAnimatedStyle(() => {
+    const p = heroCollapse.value;
+    return {
+      maxHeight: (1 - p) * HERO_H,
+      opacity: 1 - p,
+      transform: [
+        { scale: 1 - p * 0.06 },
+        { translateY: -p * 14 },
+      ],
+      overflow: 'hidden',
+    };
+  });
+
+  // When the user picks a match in match mode, open the picks sheet.
+  function handleMatchPress(matchId: string) {
+    if (viewMode === 'match') {
+      setSheetMatchId(matchId);
+    } else {
+      toggleExpand(matchId);
+    }
+  }
+
+  // Picks data + selected match for the sheet (only fetched while a sheet
+  // is actually open — Tanstack handles the unmount).
+  const sheetMatch = leagueMatches.find((m) => m.id === sheetMatchId) ?? null;
+  const { data: sheetPicks = {}, isLoading: sheetPicksLoading } =
+    useMatchPicksInGroup(sheetMatchId ?? undefined, groupId);
+
   // ── Pill content — name of centered match or default label ───
   const centeredMatch = leagueMatches.find((m) => m.id === centeredMatchId) ?? null;
   const pillLabel = centeredMatch
@@ -310,17 +364,28 @@ export default function GroupCircle() {
 
   return (
     <ScreenContainer theme="dark">
-      <TopBar title={group.name} onBack />
+      <TopBar
+        title={group.name}
+        onBack
+        right={
+          <ViewModeToggle
+            value={viewMode}
+            onChange={setViewMode}
+            accent={accentColor}
+          />
+        }
+      />
 
       {/* ── FIXED region: header + wheel ──────────────────────
           This whole block does NOT scroll. Only the matches list below
-          the pill is scrollable. The pill itself acts as the divider. */}
-      <View style={{ alignItems: 'center', paddingTop: 8 }}>
-        {/* Focused member header — sits ABOVE the wheel so the "Ver perfil"
-            button is contextually next to the person it refers to. The
-            button area is rendered with a fixed minHeight so switching
-            from "me" (no button) to another member (button shown) doesn't
-            jump the rest of the UI. */}
+          the pill is scrollable. The pill itself acts as the divider.
+          Wrapped in Animated.View so the entire hero collapses upward
+          when the user switches to "Por partido" mode. */}
+      <Animated.View style={[{ alignItems: 'center', paddingTop: 8 }, heroStyle]}>
+        {/* Focused member header — compact name/username block. The
+            "Ver perfil" button used to live here; it has moved INSIDE the
+            wheel, just below the focused avatar, so this header stays
+            light and the wheel doesn't have to fight for vertical space. */}
         <View style={{ alignItems: 'center' }}>
           <Text style={{ fontSize: 10, fontWeight: '800', color: colors.mist, letterSpacing: 1 }}>
             {isFocusedMe ? 'TÚ' : 'COMPARANDO CON'}
@@ -335,36 +400,6 @@ export default function GroupCircle() {
               @{focusedMember.profile.username}
             </Text>
           ) : null}
-
-          {/* Reserved space for the "Ver perfil" button — always 34px tall
-              so the wheel doesn't shift between me-focused and other-focused
-              states. */}
-          <View style={{ height: 34, marginTop: 6, justifyContent: 'center' }}>
-            {!isFocusedMe && focusedMember ? (
-              <Pressable
-                onPress={() =>
-                  router.push({ pathname: '/user/[id]', params: { id: focusedMember.user_id } })
-                }
-                style={({ pressed }) => ({
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 6,
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                  borderRadius: 9999,
-                  backgroundColor: 'rgba(255,255,255,0.05)',
-                  borderWidth: 1,
-                  borderColor: 'rgba(255,255,255,0.10)',
-                  opacity: pressed ? 0.75 : 1,
-                })}
-              >
-                <Icon name="user" size={12} color={colors.paper2} />
-                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.paper2 }}>
-                  Ver perfil
-                </Text>
-              </Pressable>
-            ) : null}
-          </View>
         </View>
 
         <GestureDetector gesture={wheelGesture}>
@@ -463,9 +498,60 @@ export default function GroupCircle() {
               progress={ring2Progress}
               color={accentColor}
             />
+
+            {/* ── In-wheel "Ver perfil" button ───────────────────
+                Floats just below the focused avatar, INSIDE the wheel
+                area. Crossfades in/out when the focused member changes
+                between "me" (hidden) and someone else (shown).
+                pointerEvents:'box-none' on the wrapper so the wheel's
+                Pan gesture can still grab empty space; only the
+                Pressable itself captures taps. */}
+            <View
+              pointerEvents="box-none"
+              style={{
+                position: 'absolute',
+                top: cy - radius + 35,   // avatar half (25) + 10px gap
+                left: 0, right: 0,
+                alignItems: 'center',
+              }}
+            >
+              {!isFocusedMe && focusedMember ? (
+                <Animated.View
+                  // Tiny re-entrance so the button "lands" alongside
+                  // the focused avatar instead of just appearing.
+                  key={focusedMember.user_id}
+                  entering={FadeIn.duration(220).easing(Easing.out(Easing.cubic))}
+                  exiting={FadeOut.duration(140).easing(Easing.in(Easing.cubic))}
+                >
+                  <Pressable
+                    onPress={() =>
+                      router.push({ pathname: '/user/[id]', params: { id: focusedMember.user_id } })
+                    }
+                    hitSlop={6}
+                    style={({ pressed }) => ({
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 5,
+                      paddingHorizontal: 10,
+                      paddingVertical: 5,
+                      borderRadius: 9999,
+                      backgroundColor: 'rgba(0,0,0,0.55)',
+                      borderWidth: 1,
+                      borderColor: accentColor + '55',
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                  >
+                    <Icon name="user" size={11} color={colors.paper} />
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: colors.paper }}>
+                      Ver perfil
+                    </Text>
+                  </Pressable>
+                </Animated.View>
+              ) : null}
+            </View>
           </View>
         </GestureDetector>
-      </View>
+      </Animated.View>
 
       {/* ── Pill divider ────────────────────────────────────
           The outer capsule stays mounted so its shape/shadow never
@@ -560,24 +646,37 @@ export default function GroupCircle() {
               No hay partidos próximos.
             </Text>
           ) : (
-            leagueMatches.map((m) => (
-              <View
-                key={m.id}
+            leagueMatches.map((m, i) => (
+              <Animated.View
+                // Re-key on viewMode so the stagger entrance replays each
+                // time the user toggles between person/match — that's the
+                // same flourish the home matches list uses on its first
+                // mount, applied here to mark the mode change.
+                key={`${viewMode}-${m.id}`}
                 onLayout={(e) =>
                   recordPosition(m.id, e.nativeEvent.layout.y, e.nativeEvent.layout.height)
                 }
+                entering={FadeInDown
+                  .delay(Math.min(i, 8) * 55)
+                  .duration(420)
+                  .easing(Easing.out(Easing.cubic))}
               >
                 <MatchComparisonCard
                   match={m}
                   groupId={groupId!}
-                  expanded={expandedMatchId === m.id}
-                  onToggle={() => toggleExpand(m.id)}
+                  expanded={viewMode === 'person' && expandedMatchId === m.id}
+                  onToggle={() => handleMatchPress(m.id)}
                   focusedMember={focusedMember}
                   meId={user?.id ?? null}
                   isCentered={m.id === centeredMatchId}
                   accentColor={accentColor}
+                  // In match mode the card never expands inline — the inline
+                  // comparison rows are hidden and the footer always shows
+                  // "Toca para ver picks ›" instead.
+                  mode={viewMode}
+                  hidePicksUntilKickoff={group.hide_picks_until_kickoff}
                 />
-              </View>
+              </Animated.View>
             ))
           )}
         </ScrollView>
@@ -594,7 +693,159 @@ export default function GroupCircle() {
           }}
         />
       </View>
+
+      {/* ── Picks-per-match sheet ────────────────────────────
+          Mounted CONDITIONALLY and KEYED by match id so each open is a
+          completely fresh component instance — fresh useSharedValue
+          (starting at screenH), fresh `entering` animations on the picks
+          rows. Without this, the sheet stayed mounted across opens and
+          the rows' FadeInDown never replayed on subsequent matches.
+
+          Slide-down dismiss is preserved because the sheet's own
+          onClose only fires AFTER its closing spring finishes — so the
+          unmount happens after the visual exit, not before. */}
+      {sheetMatchId && sheetMatch ? (
+        <MatchPicksSheet
+          key={sheetMatchId}
+          match={sheetMatch}
+          members={members}
+          picks={sheetPicks}
+          loading={sheetPicksLoading}
+          meId={user?.id ?? null}
+          accentColor={accentColor}
+          hidePicksUntilKickoff={group.hide_picks_until_kickoff}
+          onClose={() => setSheetMatchId(null)}
+        />
+      ) : null}
     </ScreenContainer>
+  );
+}
+
+// ─── View-mode toggle ─────────────────────────────────────────
+//
+// Compact two-icon pill that lives in the TopBar right slot. A glowing
+// indicator slides between the two segments with a spring — small but
+// premium-feeling microinteraction. No labels: icons + the slider are
+// enough to communicate the state and save horizontal space.
+//
+// Sizing is fixed (no onLayout) so it renders with the correct indicator
+// width on the very first frame — important for a control mounted in
+// TopBar where we can't afford a re-layout flash.
+
+interface ViewModeToggleProps {
+  value:    'person' | 'match';
+  onChange: (v: 'person' | 'match') => void;
+  accent:   string;
+}
+
+const TOGGLE_W       = 72;            // total outer pill width (including border)
+const TOGGLE_H       = 30;            // total outer pill height (including border)
+const TOGGLE_PAD     = 3;             // gutter on BOTH sides of the indicator
+const TOGGLE_BORDER  = 1;             // container borderWidth
+// React Native positions absolutely-positioned children RELATIVE TO THE
+// INNER CONTENT AREA (inside the container's border), so the usable width
+// is the outer width minus 2 * borderWidth.
+const TOGGLE_INNER_W = TOGGLE_W - 2 * TOGGLE_BORDER;          // usable width (70)
+const TOGGLE_SEG_W   = TOGGLE_INNER_W / 2;                    // each tap area (35)
+// The indicator sits with a PAD gutter on BOTH of its sides within its half
+// → width = SEG_W - 2*PAD. Its travel from left slot to right slot is one
+// full segment (SEG_W). With this geometry:
+//   • left rest:  [PAD, PAD+IND_W]              = [3, 32], centre 17.5
+//   • right rest: [PAD+SEG_W, PAD+SEG_W+IND_W]  = [38, 67], centre 52.5
+// Both rests have a symmetric 3px gutter, AND their centres (17.5 / 52.5)
+// land exactly on the centres of the two flex:1 icon segments — so the
+// icons sit dead-centre inside the bubble at both positions.
+const TOGGLE_IND_W   = TOGGLE_SEG_W - 2 * TOGGLE_PAD;         // indicator width (29)
+const TOGGLE_TRAVEL  = TOGGLE_SEG_W;                          // slot-to-slot travel (35)
+
+function ViewModeToggle({ value, onChange, accent }: ViewModeToggleProps) {
+  const indicatorX = useSharedValue(value === 'person' ? 0 : 1);
+  useEffect(() => {
+    indicatorX.value = withSpring(value === 'person' ? 0 : 1, {
+      damping: 18,
+      stiffness: 220,
+      mass: 0.9,
+    });
+  }, [value, indicatorX]);
+
+  const indicatorStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: indicatorX.value * TOGGLE_TRAVEL }],
+  }));
+
+  return (
+    <View
+      style={{
+        width: TOGGLE_W,
+        height: TOGGLE_H,
+        borderRadius: 9999,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.08)',
+        flexDirection: 'row',
+        overflow: 'hidden',
+        position: 'relative',
+      }}
+    >
+      {/* Sliding accent indicator — sits behind the icons. */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          {
+            position: 'absolute',
+            top: TOGGLE_PAD,
+            bottom: TOGGLE_PAD,
+            left: TOGGLE_PAD,
+            width: TOGGLE_IND_W,
+            borderRadius: 9999,
+            backgroundColor: accent + '26',
+            borderWidth: 1,
+            borderColor: accent + '70',
+          },
+          indicatorStyle,
+        ]}
+      />
+
+      <ToggleSegment
+        active={value === 'person'}
+        accent={accent}
+        icon="user"
+        onPress={() => onChange('person')}
+      />
+      <ToggleSegment
+        active={value === 'match'}
+        accent={accent}
+        icon="trophy"
+        onPress={() => onChange('match')}
+      />
+    </View>
+  );
+}
+
+interface ToggleSegmentProps {
+  active:  boolean;
+  accent:  string;
+  icon:    'user' | 'trophy';
+  onPress: () => void;
+}
+
+function ToggleSegment({ active, accent, icon, onPress }: ToggleSegmentProps) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={4}
+      style={({ pressed }) => ({
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        opacity: pressed ? 0.7 : 1,
+      })}
+    >
+      <Icon
+        name={icon}
+        size={14}
+        color={active ? colors.paper : colors.mist}
+      />
+    </Pressable>
   );
 }
 
@@ -727,10 +978,15 @@ interface CardProps {
   meId:           string | null;
   isCentered:     boolean;
   accentColor:    string;
+  /** "person" → tap expands inline; "match" → tap delegates (parent opens sheet). */
+  mode:           'person' | 'match';
+  /** Group setting — hides others' picks until the match starts. */
+  hidePicksUntilKickoff: boolean;
 }
 
 function MatchComparisonCardImpl({
-  match, groupId, expanded, onToggle, focusedMember, meId, isCentered, accentColor,
+  match, groupId, expanded, onToggle, focusedMember, meId, isCentered, accentColor, mode,
+  hidePicksUntilKickoff,
 }: CardProps) {
   const home = LIGAMX[match.home];
   const away = LIGAMX[match.away];
@@ -769,6 +1025,8 @@ function MatchComparisonCardImpl({
   const focusedPick = focusedMember ? picks[focusedMember.user_id] : undefined;
   const myPick      = meId ? picks[meId] : undefined;
   const isFocusedMe = focusedMember?.user_id === meId;
+  // Other member's pick is hidden until kickoff when the group setting is on.
+  const focusedLocked = hidePicksUntilKickoff && match.status === 'upcoming';
 
   return (
     <Pressable
@@ -824,7 +1082,11 @@ function MatchComparisonCardImpl({
             Liga MX · {match.round}
           </Text>
           <Text style={{ fontSize: 11, fontWeight: '800', color: accentColor }}>
-            {match.status === 'finished' ? 'Final ›' : 'Toca para comparar ›'}
+            {match.status === 'finished'
+              ? 'Final ›'
+              : mode === 'match'
+                ? 'Ver picks del grupo ›'
+                : 'Toca para comparar ›'}
           </Text>
         </View>
       </Animated.View>
@@ -847,6 +1109,7 @@ function MatchComparisonCardImpl({
               home={match.home}
               away={match.away}
               tint={accentColor}
+              locked={focusedLocked}
             />
           ) : null}
           <ComparisonRow
@@ -868,15 +1131,17 @@ function MatchComparisonCardImpl({
 const MatchComparisonCard = memo(MatchComparisonCardImpl);
 
 function ComparisonRow({
-  label, prediction, home, away, tint,
+  label, prediction, home, away, tint, locked = false,
 }: {
   label: string;
   prediction: 'home' | 'draw' | 'away' | undefined;
   home: TeamCode;
   away: TeamCode;
   tint: string;
+  /** When true, the pick is hidden until kickoff — show a lock, not "Sin pick". */
+  locked?: boolean;
 }) {
-  const hasPick = !!prediction;
+  const hasPick = !locked && !!prediction;
   return (
     <View
       style={{
@@ -894,9 +1159,18 @@ function ComparisonRow({
       <Text style={{ flex: 1, fontSize: 12, fontWeight: '800', color: colors.paper }}>
         {label}
       </Text>
-      <Text style={{ fontSize: 13, fontWeight: '900', color: hasPick ? tint : colors.mist }}>
-        {predLabel(prediction, home, away)}
-      </Text>
+      {locked ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Icon name="lock" size={12} color={colors.mist} />
+          <Text style={{ fontSize: 12, fontWeight: '800', color: colors.mist }}>
+            Se revela al iniciar
+          </Text>
+        </View>
+      ) : (
+        <Text style={{ fontSize: 13, fontWeight: '900', color: hasPick ? tint : colors.mist }}>
+          {predLabel(prediction, home, away)}
+        </Text>
+      )}
     </View>
   );
 }

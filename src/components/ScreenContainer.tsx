@@ -9,6 +9,15 @@ interface ScreenContainerProps {
   theme?: 'dark' | 'light';
   edges?: Edge[];
   style?: StyleProp<ViewStyle>;
+  /**
+   * Optional full-bleed background that paints THROUGH the safe-area insets
+   * (top + bottom). Pass e.g. a `<LinearGradient style={StyleSheet.absoluteFill}/>`.
+   *
+   * When provided, the SafeAreaView itself is transparent so the background
+   * shows behind the status-bar area and the home-indicator area — no more
+   * dark "bar" peeking out below a colored CTA on gradient screens.
+   */
+  background?: ReactNode;
 }
 
 // Native replacement for the web "Phone" shell. The device is the phone now,
@@ -18,13 +27,24 @@ export function ScreenContainer({
   theme = 'dark',
   edges = ['top', 'bottom'],
   style,
+  background,
 }: ScreenContainerProps) {
   const bg = theme === 'light' ? colors.cream : colors.s900;
+  const useCustomBg = background !== undefined;
   return (
-    <SafeAreaView edges={edges} style={[{ flex: 1, backgroundColor: bg }, style]}>
-      <StatusBar style={theme === 'light' ? 'dark' : 'light'} />
-      <View style={{ flex: 1 }}>{children}</View>
-    </SafeAreaView>
+    <View style={{ flex: 1, backgroundColor: bg }}>
+      {background}
+      <SafeAreaView
+        edges={edges}
+        style={[
+          { flex: 1, backgroundColor: useCustomBg ? 'transparent' : bg },
+          style,
+        ]}
+      >
+        <StatusBar style={theme === 'light' ? 'dark' : 'light'} />
+        <View style={{ flex: 1 }}>{children}</View>
+      </SafeAreaView>
+    </View>
   );
 }
 

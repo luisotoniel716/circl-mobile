@@ -11,6 +11,8 @@ export interface GroupDetail extends Group {
   invite_code: string;
   created_by:  string;
   image_url:   string | null;
+  /** When true, members can't see each other's picks until a match starts. */
+  hide_picks_until_kickoff: boolean;
 }
 
 export interface GroupMember {
@@ -137,28 +139,34 @@ export function useGroup(groupId: string | undefined) {
     queryKey: ['group', groupId],
     enabled: !!groupId,
     queryFn: async (): Promise<GroupDetail | null> => {
+      // hide_picks_until_kickoff was added after the generated types
+      // snapshot — cast around it until types are regenerated.
       const { data, error } = await supabase
         .from('groups')
-        .select('id, name, icon, accent, invite_code, league_id, created_by, image_url')
+        .select('id, name, icon, accent, invite_code, league_id, created_by, image_url, hide_picks_until_kickoff')
         .eq('id', groupId!)
-        .single();
+        .single() as unknown as {
+          data: (Record<string, unknown> & { hide_picks_until_kickoff: boolean | null }) | null;
+          error: { message: string } | null;
+        };
       if (error) throw error;
       if (!data) return null;
 
       const { count } = await supabase
         .from('group_members')
         .select('id', { count: 'exact', head: true })
-        .eq('group_id', data.id);
+        .eq('group_id', data.id as string);
 
       return {
-        id:          data.id,
-        name:        data.name,
-        icon:        data.icon,
-        accent:      data.accent,
-        invite_code: data.invite_code,
-        league_id:   data.league_id,
-        created_by:  data.created_by,
-        image_url:   data.image_url ?? null,
+        id:          data.id as string,
+        name:        data.name as string,
+        icon:        data.icon as string,
+        accent:      data.accent as string,
+        invite_code: data.invite_code as string,
+        league_id:   data.league_id as string,
+        created_by:  data.created_by as string,
+        image_url:   (data.image_url as string | null) ?? null,
+        hide_picks_until_kickoff: data.hide_picks_until_kickoff ?? true,
         members:     count ?? 0,
         myRank:      1,
         myPts:       0,
@@ -223,6 +231,8 @@ export interface CreateGroupInput {
   accent?:     string;
   league_id:   string;
   image_url?:  string | null;
+  /** Defaults to true (picks hidden until kickoff). */
+  hide_picks_until_kickoff?: boolean;
 }
 
 /** Create a new group. The DB trigger adds the creator as admin. */
@@ -243,26 +253,35 @@ export function useCreateGroup() {
           league_id:  input.league_id,
           image_url:  input.image_url ?? null,
           created_by: user.id,
-        })
-        .select('id, name, icon, accent, invite_code, league_id, created_by, image_url')
-        .single();
+          // New column — cast the insert object so TS doesn't complain
+          // about the missing generated-types field.
+          hide_picks_until_kickoff: input.hide_picks_until_kickoff ?? true,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any)
+        .select('id, name, icon, accent, invite_code, league_id, created_by, image_url, hide_picks_until_kickoff')
+        .single() as unknown as {
+          data: (Record<string, unknown> & { hide_picks_until_kickoff: boolean | null }) | null;
+          error: { message: string; details?: string } | null;
+        };
       if (error) {
         // Wrap PostgREST errors so `e.message` shows useful info downstream.
         const msg = error.message
-          || (error as { details?: string }).details
+          || error.details
           || JSON.stringify(error);
         throw new Error(`[create_group] ${msg}`);
       }
+      if (!data) throw new Error('[create_group] no data returned');
 
       return {
-        id:          data.id,
-        name:        data.name,
-        icon:        data.icon,
-        accent:      data.accent,
-        invite_code: data.invite_code,
-        league_id:   data.league_id,
-        created_by:  data.created_by,
-        image_url:   data.image_url ?? null,
+        id:          data.id as string,
+        name:        data.name as string,
+        icon:        data.icon as string,
+        accent:      data.accent as string,
+        invite_code: data.invite_code as string,
+        league_id:   data.league_id as string,
+        created_by:  data.created_by as string,
+        image_url:   (data.image_url as string | null) ?? null,
+        hide_picks_until_kickoff: data.hide_picks_until_kickoff ?? true,
         members:     1,
         myRank:      1,
         myPts:       0,
@@ -310,6 +329,7 @@ export interface UpdateGroupInput {
   icon?:       string;
   accent?:     string;
   image_url?:  string | null;
+  hide_picks_until_kickoff?: boolean;
 }
 
 /** Update group metadata. RLS allows admins only. */
@@ -323,35 +343,84 @@ export function useUpdateGroup() {
         icon?: string;
         accent?: string;
         image_url?: string | null;
+        hide_picks_until_kickoff?: boolean;
       } = {};
       if (input.name      !== undefined) patch.name      = input.name.trim();
       if (input.icon      !== undefined) patch.icon      = input.icon;
       if (input.accent    !== undefined) patch.accent    = input.accent;
       if (input.image_url !== undefined) patch.image_url = input.image_url;
+      if (input.hide_picks_until_kickoff !== undefined) {
+        patch.hide_picks_until_kickoff = input.hide_picks_until_kickoff;
+      }
       const { error } = await supabase
         .from('groups')
-        .update(patch)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .update(patch as any)
         .eq('id', input.group_id);
       if (error) throw new Error(error.message);
     },
     onSuccess: (_void, input) => {
       qc.invalidateQueries({ queryKey: ['group', input.group_id] });
       qc.invalidateQueries({ queryKey: ['groups', 'me'] });
+      // Toggling pick visibility changes what RLS lets the client read.
+      // The pick queries were cached (often empty) under the old setting,
+      // so force them to refetch — otherwise the circle keeps showing
+      // "sin pick" even though picks are now visible.
+      if (input.hide_picks_until_kickoff !== undefined) {
+        qc.invalidateQueries({ queryKey: ['match-picks-in-group'] });
+        qc.invalidateQueries({ queryKey: ['my-picks-in-group'] });
+        qc.invalidateQueries({ queryKey: ['group-pick-dist'] });
+      }
     },
   });
+}
+
+/**
+ * Remove a group id from the current user's pinned_groups, if present.
+ * Called when a group is left or deleted so phantom ids don't linger and
+ * count against the pin limit. Best-effort: a failure here shouldn't block
+ * the leave/delete itself, so the caller swallows errors.
+ */
+async function unpinGroupForUser(userId: string, groupId: string): Promise<void> {
+  const { data } = await supabase
+    .from('profiles')
+    .select('pinned_groups')
+    .eq('id', userId)
+    .single() as unknown as { data: { pinned_groups: string[] | null } | null };
+  const current = data?.pinned_groups ?? [];
+  if (!current.includes(groupId)) return;
+  const next = current.filter((id) => id !== groupId);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await supabase.from('profiles').update({ pinned_groups: next } as any).eq('id', userId);
 }
 
 /** Delete the group entirely. RLS allows admins only (and cascades). */
 export function useDeleteGroup() {
   const qc = useQueryClient();
+  const { user } = useAuth();
 
   return useMutation({
     mutationFn: async (groupId: string): Promise<void> => {
-      const { error } = await supabase.from('groups').delete().eq('id', groupId);
+      // `.select()` so we can verify a row was actually deleted. RLS only
+      // lets admins delete groups; without this check a blocked delete would
+      // return no error AND no effect, silently "succeeding".
+      const { data, error } = await supabase
+        .from('groups')
+        .delete()
+        .eq('id', groupId)
+        .select('id');
       if (error) throw new Error(error.message);
+      if (!data || data.length === 0) {
+        throw new Error('No tienes permiso para eliminar este grupo.');
+      }
+      // Best-effort cleanup of a stale pin. Don't let it fail the delete.
+      if (user) {
+        try { await unpinGroupForUser(user.id, groupId); } catch { /* ignore */ }
+      }
     },
     onSuccess: (_void, groupId) => {
       qc.invalidateQueries({ queryKey: ['groups', 'me'] });
+      qc.invalidateQueries({ queryKey: ['pinned-groups'] });
       qc.removeQueries({ queryKey: ['group', groupId] });
       qc.removeQueries({ queryKey: ['group-members', groupId] });
     },
@@ -391,9 +460,13 @@ export function useLeaveGroup() {
         .eq('group_id', groupId)
         .eq('user_id', user.id);
       if (error) throw error;
+      // Best-effort cleanup of a stale pin (covers the sole-member case
+      // where leaving cascades into a group delete).
+      try { await unpinGroupForUser(user.id, groupId); } catch { /* ignore */ }
     },
     onSuccess: (_void, groupId) => {
       qc.invalidateQueries({ queryKey: ['groups', 'me'] });
+      qc.invalidateQueries({ queryKey: ['pinned-groups'] });
       qc.invalidateQueries({ queryKey: ['group', groupId] });
       qc.invalidateQueries({ queryKey: ['group-members', groupId] });
     },

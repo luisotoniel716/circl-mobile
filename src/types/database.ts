@@ -400,33 +400,214 @@ export type Database = {
           },
         ];
       };
-      picks: {
+      match_goals: {
         Row: {
           created_at: string;
+          id: string;
+          match_id: string;
+          player_id: string;
+          team_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          match_id: string;
+          player_id: string;
+          team_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          match_id?: string;
+          player_id?: string;
+          team_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'match_goals_match_id_fkey';
+            columns: ['match_id'];
+            isOneToOne: false;
+            referencedRelation: 'matches';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'match_goals_player_id_fkey';
+            columns: ['player_id'];
+            isOneToOne: false;
+            referencedRelation: 'players';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'match_goals_team_id_fkey';
+            columns: ['team_id'];
+            isOneToOne: false;
+            referencedRelation: 'teams';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      match_lineups: {
+        Row: {
+          created_at: string;
+          id: string;
+          match_id: string;
+          player_id: string;
+          slot: number;
+          team_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          match_id: string;
+          player_id: string;
+          slot: number;
+          team_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          match_id?: string;
+          player_id?: string;
+          slot?: number;
+          team_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'match_lineups_match_id_fkey';
+            columns: ['match_id'];
+            isOneToOne: false;
+            referencedRelation: 'matches';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'match_lineups_player_id_fkey';
+            columns: ['player_id'];
+            isOneToOne: false;
+            referencedRelation: 'players';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'match_lineups_team_id_fkey';
+            columns: ['team_id'];
+            isOneToOne: false;
+            referencedRelation: 'teams';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      players: {
+        Row: {
+          active: boolean;
+          created_at: string;
+          id: string;
+          name: string;
+          number: number | null;
+          position: string;
+          team_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          active?: boolean;
+          created_at?: string;
+          id?: string;
+          name: string;
+          number?: number | null;
+          position?: string;
+          team_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          active?: boolean;
+          created_at?: string;
+          id?: string;
+          name?: string;
+          number?: number | null;
+          position?: string;
+          team_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'players_team_id_fkey';
+            columns: ['team_id'];
+            isOneToOne: false;
+            referencedRelation: 'teams';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      scorer_picks: {
+        Row: {
+          created_at: string;
+          id: string;
+          pick_id: string;
+          player_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          pick_id: string;
+          player_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          pick_id?: string;
+          player_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'scorer_picks_pick_id_fkey';
+            columns: ['pick_id'];
+            isOneToOne: false;
+            referencedRelation: 'picks';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'scorer_picks_player_id_fkey';
+            columns: ['player_id'];
+            isOneToOne: false;
+            referencedRelation: 'players';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      picks: {
+        Row: {
+          away_goals: number | null;
+          created_at: string;
           group_id: string;
+          home_goals: number | null;
           id: string;
           match_id: string;
           prediction: string;
           updated_at: string;
           user_id: string;
+          with_draw: boolean;
         };
         Insert: {
+          away_goals?: number | null;
           created_at?: string;
           group_id: string;
+          home_goals?: number | null;
           id?: string;
           match_id: string;
           prediction: string;
           updated_at?: string;
           user_id: string;
+          with_draw?: boolean;
         };
         Update: {
+          away_goals?: number | null;
           created_at?: string;
           group_id?: string;
+          home_goals?: number | null;
           id?: string;
           match_id?: string;
           prediction?: string;
           updated_at?: string;
           user_id?: string;
+          with_draw?: boolean;
         };
         Relationships: [
           {
@@ -661,3 +842,7 @@ export type Friendship   = Database['public']['Tables']['friendships']['Row'];
 export type Notification = Database['public']['Tables']['notifications']['Row'];
 export type GroupInvite  = Database['public']['Tables']['group_invites']['Row'];
 export type PushToken    = Database['public']['Tables']['push_tokens']['Row'];
+export type DBPlayer     = Database['public']['Tables']['players']['Row'];
+export type MatchLineup  = Database['public']['Tables']['match_lineups']['Row'];
+export type ScorerPick   = Database['public']['Tables']['scorer_picks']['Row'];
+export type MatchGoal    = Database['public']['Tables']['match_goals']['Row'];

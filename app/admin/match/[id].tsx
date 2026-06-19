@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import {
   View, ScrollView, Pressable, Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import { LIGAMX } from '../../../src/data';
+import type { TeamCode } from '../../../src/types';
 import {
   ScreenContainer, TopBar, CButton, Input, Icon, Text, colors, DateTimeField,
 } from '../../../src/components';
@@ -404,6 +406,49 @@ export default function AdminEditMatch() {
             ) : null}
           </View>
 
+          {/* Lineups */}
+          <View>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: colors.paper2, marginBottom: 8, paddingLeft: 4 }}>
+              Alineaciones (4-3-3)
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <LineupButton
+                label="LOCAL"
+                code={home?.code as TeamCode | undefined}
+                name={home?.short_name}
+                onPress={() => router.push(`/admin/lineup?matchId=${match.id}&teamId=${homeTeamId}` as Href)}
+              />
+              <LineupButton
+                label="VISITANTE"
+                code={away?.code as TeamCode | undefined}
+                name={away?.short_name}
+                onPress={() => router.push(`/admin/lineup?matchId=${match.id}&teamId=${awayTeamId}` as Href)}
+              />
+            </View>
+          </View>
+
+          {/* Actual scorers (capture once there's a score) */}
+          <Pressable
+            onPress={() => router.push(`/admin/scorers?matchId=${match.id}` as Href)}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 10,
+              backgroundColor: colors.s800,
+              borderRadius: 12,
+              padding: 14,
+              borderWidth: 1,
+              borderColor: 'rgba(255,255,255,0.04)',
+            }}
+          >
+            <Text style={{ fontSize: 18 }}>⚽</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.paper, fontSize: 13, fontWeight: '800' }}>Goleadores reales</Text>
+              <Text style={{ color: colors.mist, fontSize: 11 }}>Captura quién anotó para puntuar predicciones.</Text>
+            </View>
+            <Icon name="forward" size={18} color={colors.mist} />
+          </Pressable>
+
           {/* Save */}
           <View style={{ marginTop: 8 }}>
             <CButton
@@ -430,5 +475,42 @@ export default function AdminEditMatch() {
         </ScrollView>
       </KeyboardAvoidingView>
     </ScreenContainer>
+  );
+}
+
+// ─── Lineup shortcut button ──────────────────────────────────
+
+interface LineupButtonProps {
+  label:   string;
+  code?:   TeamCode;
+  name?:   string;
+  onPress: () => void;
+}
+
+function LineupButton({ label, code, name, onPress }: LineupButtonProps) {
+  const known = code ? LIGAMX[code] : undefined;
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        flex: 1,
+        backgroundColor: colors.s800,
+        borderRadius: 14,
+        padding: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.06)',
+      }}
+    >
+      <Text style={{ fontSize: 10, fontWeight: '800', color: colors.mist, marginBottom: 6 }}>{label}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 14, fontWeight: '900', color: colors.paper }}>
+          {name ?? '—'}
+        </Text>
+        <Icon name="people" size={16} color={colors.mist} />
+      </View>
+      <Text style={{ fontSize: 11, color: colors.gold, marginTop: 4, fontWeight: '700' }}>
+        {known ? 'Editar 11 ›' : 'Editar ›'}
+      </Text>
+    </Pressable>
   );
 }

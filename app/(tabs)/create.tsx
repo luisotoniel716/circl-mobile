@@ -7,13 +7,14 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue, useAnimatedStyle, withSpring, withTiming, Easing,
+  interpolateColor,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import {
-  ScreenContainer, CButton, Input, Icon, Text, colors,
-  Avatar, CreateGroupSuccess,
+  ScreenContainer, TopBar, CButton, Input, Icon, Text, colors,
+  Avatar, CreateGroupSuccess, StepProgress,
 } from '../../src/components';
-import type { OrbitMember } from '../../src/components';
+import type { OrbitMember, IconName } from '../../src/components';
 import { useAuth } from '../../src/lib/auth';
 import { useAccent } from '../../src/lib/tweaks';
 import {
@@ -26,7 +27,7 @@ import type { PickedImage } from '../../src/lib/storage';
 const ICONS    = ['🎯','⚽','🏆','🔥','👑','⭐','💎','⚡','🎲','🚀'];
 const ACCENTS  = ['#4F6BFF','#FF5C8A','#22C58E','#F4A300','#A057FF','#FF6A3D','#0BA5E9','#E11D48'];
 const SCREEN_W = Dimensions.get('window').width;
-const STEPS    = ['name', 'style', 'friends', 'review'] as const;
+const STEPS    = ['name', 'style', 'friends', 'config', 'review'] as const;
 type StepKey   = typeof STEPS[number];
 
 // ─── Helpers ───────────────────────────────────────────────
@@ -113,6 +114,9 @@ export default function Create() {
   const [pickingCover, setPickingCover] = useState(false);
   const [inviteIds,    setInviteIds]    = useState<string[]>([]);
   const [friendQuery,  setFriendQuery]  = useState('');
+  // Group config — when true, members can't see each other's picks until
+  // the match starts (anti-copy). Defaults to true.
+  const [hidePicks,    setHidePicks]    = useState(true);
 
   // ── Success overlay state ──
   // We show the overlay as soon as the user taps "Crear grupo". The
@@ -159,6 +163,7 @@ export default function Create() {
     if (stepKey === 'name')    return name.trim().length >= 3;
     if (stepKey === 'style')   return true;
     if (stepKey === 'friends') return true; // friends is optional
+    if (stepKey === 'config')  return true;
     return true;
   })();
 
@@ -171,6 +176,7 @@ export default function Create() {
       if (inviteIds.length === 0) return 'Saltar';
       return `Agregar ${inviteIds.length} ${inviteIds.length === 1 ? 'amigo' : 'amigos'}`;
     }
+    if (stepKey === 'config') return 'Continuar';
     return inviteIds.length > 0
       ? `Crear e invitar a ${inviteIds.length}`
       : 'Crear grupo';
@@ -179,6 +185,10 @@ export default function Create() {
   // ── Step navigation ──
   function goNext() {
     if (!canAdvance) return;
+    // Dismiss the keyboard whenever we change steps — the name step has a
+    // focused TextInput and leaving it up while the next panel slides in
+    // looks broken (keyboard floating over the style/friends screens).
+    Keyboard.dismiss();
     Haptics.selectionAsync().catch(() => {});
     if (stepIdx < STEPS.length - 1) {
       setStepIdx((s) => s + 1);
@@ -187,6 +197,7 @@ export default function Create() {
     }
   }
   function goBack() {
+    Keyboard.dismiss();
     Haptics.selectionAsync().catch(() => {});
     if (stepIdx > 0) {
       setStepIdx((s) => s - 1);
@@ -229,7 +240,10 @@ export default function Create() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
     try {
-      const group = await createGroup.mutateAsync({ name, icon, accent, league_id: leagueId });
+      const group = await createGroup.mutateAsync({
+        name, icon, accent, league_id: leagueId,
+        hide_picks_until_kickoff: hidePicks,
+      });
 
       if (pickedCover) {
         try {
@@ -273,6 +287,7 @@ export default function Create() {
     setAccent('#4F6BFF');
     setPickedCover(null);
     setInviteIds([]);
+    setHidePicks(true);
     setStepIdx(0);
     setShowSuccess(false);
     setSuccessReady(false);
@@ -319,21 +334,23 @@ export default function Create() {
           area stays full-height; only the CTA's distance to the bottom
           edge changes. */}
       <View style={{ flex: 1 }}>
-        {/* ── Header: back + segmented stepper ─────────── */}
-        <View style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 14 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-            <Pressable onPress={goBack} hitSlop={10}>
-              <Text style={{ color: colors.paper, fontWeight: '800', fontSize: 13 }}>
-                {stepIdx === 0 ? 'Cerrar' : 'Atrás'}
-              </Text>
-            </Pressable>
-            <View style={{ flex: 1, flexDirection: 'row', gap: 6 }}>
-              {STEPS.map((_, i) => (
-                <Stepper key={i} index={i} active={i <= stepIdx} accent={accent} />
-              ))}
-            </View>
-          </View>
-        </View>
+        {/* ── Header: nav icons + step progress ────────── */}
+        <TopBar
+          left={
+            stepIdx === 0 ? (
+              <Pressable onPress={goBack} hitSlop={8} style={{ padding: 6, marginLeft: -6 }}>
+                <Icon name="close" size={20} color={colors.paper2} />
+              </Pressable>
+            ) : (
+              <Pressable onPress={goBack} hitSlop={8} style={{ padding: 6, marginLeft: -6 }}>
+                <Icon name="back" size={22} color={colors.paper} />
+              </Pressable>
+            )
+          }
+          center={
+            <StepProgress steps={STEPS.length} current={stepIdx} />
+          }
+        />
 
         {/* ── Horizontal panel track ───────────────────── */}
         <View style={{ flex: 1, overflow: 'hidden' }}>
@@ -590,7 +607,29 @@ export default function Create() {
               )}
             </View>
 
-            {/* Panel 4: Review ──────────────────────── */}
+            {/* Panel 4: Config ──────────────────────── */}
+            <View style={{ width: SCREEN_W }}>
+              <ScrollView
+                contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 24, gap: 18 }}
+                showsVerticalScrollIndicator={false}
+              >
+                <PanelHeader
+                  kicker="AJUSTES"
+                  title="Configura tu Circl"
+                  subtitle="Define cómo se comporta el grupo. Puedes cambiarlo después."
+                />
+                <SettingToggleRow
+                  icon="lock"
+                  accent={accent}
+                  title="Ocultar picks hasta el partido"
+                  subtitle="Los miembros no verán los pronósticos de los demás hasta que inicie cada partido. Evita que se copien."
+                  value={hidePicks}
+                  onChange={setHidePicks}
+                />
+              </ScrollView>
+            </View>
+
+            {/* Panel 5: Review ──────────────────────── */}
             <View style={{ width: SCREEN_W }}>
               <ScrollView
                 contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 24, gap: 18 }}
@@ -683,6 +722,11 @@ export default function Create() {
                       : `${inviteIds.length} ${inviteIds.length === 1 ? 'amigo' : 'amigos'}`}
                     onPress={() => setStepIdx(2)}
                   />
+                  <ReviewRow
+                    label="Picks ocultos"
+                    value={hidePicks ? 'Hasta que inicie el partido' : 'Visibles siempre'}
+                    onPress={() => setStepIdx(3)}
+                  />
                 </View>
               </ScrollView>
             </View>
@@ -724,46 +768,6 @@ export default function Create() {
 
 // ─── Subcomponents ─────────────────────────────────────────
 
-function Stepper({ index, active, accent }: { index: number; active: boolean; accent: string }) {
-  // Fill bar uses the group's accent so the wizard "previews" the chosen
-  // color subtly as the user advances through the steps.
-  //
-  // Use `withTiming` instead of `withSpring`: when the user goes BACK,
-  // the bar animates from 1 → 0. An underdamped spring overshoots past 0
-  // (clipped to 0 visually) and then settles by oscillating up to a small
-  // positive value before resting, which reads as "the bar fills again
-  // briefly". Timing has no overshoot — clean fill on advance, clean
-  // empty on back.
-  const w = useSharedValue(active ? 1 : 0);
-  useEffect(() => {
-    w.value = withTiming(active ? 1 : 0, {
-      duration: 280,
-      easing: Easing.out(Easing.cubic),
-    });
-  }, [active, w]);
-  const fillStyle = useAnimatedStyle(() => ({
-    width: `${w.value * 100}%`,
-  }));
-  return (
-    <View
-      style={{
-        flex: 1, height: 4, borderRadius: 2,
-        backgroundColor: 'rgba(255,255,255,0.10)',
-        overflow: 'hidden',
-      }}
-      // eslint-disable-next-line react/no-unknown-property
-      accessibilityLabel={`Paso ${index + 1}`}
-    >
-      <Animated.View
-        style={[
-          { height: '100%', borderRadius: 2, backgroundColor: accent },
-          fillStyle,
-        ]}
-      />
-    </View>
-  );
-}
-
 function PanelHeader({ kicker, title, subtitle }: { kicker: string; title: string; subtitle: string }) {
   return (
     <View style={{ paddingTop: 4, paddingBottom: 22 }}>
@@ -777,6 +781,95 @@ function PanelHeader({ kicker, title, subtitle }: { kicker: string; title: strin
         {subtitle}
       </Text>
     </View>
+  );
+}
+
+// A premium settings row with an icon, title/subtitle and an animated
+// switch. The whole row is tappable. The switch thumb glides with a spring
+// and the track cross-fades to the accent colour when on.
+function SettingToggleRow({
+  icon, accent, title, subtitle, value, onChange,
+}: {
+  icon: IconName;
+  accent: string;
+  title: string;
+  subtitle: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  const t = useSharedValue(value ? 1 : 0);
+  useEffect(() => {
+    t.value = withTiming(value ? 1 : 0, { duration: 220, easing: Easing.out(Easing.cubic) });
+  }, [value, t]);
+
+  const TRACK_W = 48;
+  const THUMB   = 22;
+  const PAD     = 3;
+  const thumbStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: t.value * (TRACK_W - THUMB - PAD * 2) }],
+  }));
+  const trackStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      t.value, [0, 1],
+      ['rgba(255,255,255,0.10)', accent],
+    ),
+  }));
+
+  return (
+    <Pressable
+      onPress={() => {
+        Haptics.selectionAsync().catch(() => {});
+        onChange(!value);
+      }}
+      style={({ pressed }) => ({
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 14,
+        padding: 16,
+        borderRadius: 16,
+        backgroundColor: colors.s800,
+        borderWidth: 1,
+        borderColor: value ? accent + '40' : 'rgba(255,255,255,0.06)',
+        opacity: pressed ? 0.9 : 1,
+      })}
+    >
+      <View
+        style={{
+          width: 40, height: 40, borderRadius: 12,
+          alignItems: 'center', justifyContent: 'center',
+          backgroundColor: value ? accent + '22' : 'rgba(255,255,255,0.05)',
+        }}
+      >
+        <Icon name={icon} size={18} color={value ? accent : colors.paper2} />
+      </View>
+
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ fontSize: 14, fontWeight: '800', color: colors.paper }}>
+          {title}
+        </Text>
+        <Text style={{ fontSize: 12, color: colors.paper2, marginTop: 3, lineHeight: 16 }}>
+          {subtitle}
+        </Text>
+      </View>
+
+      {/* Switch */}
+      <Animated.View
+        style={[
+          { width: TRACK_W, height: THUMB + PAD * 2, borderRadius: 9999, justifyContent: 'center', paddingHorizontal: PAD },
+          trackStyle,
+        ]}
+      >
+        <Animated.View
+          style={[
+            {
+              width: THUMB, height: THUMB, borderRadius: THUMB / 2,
+              backgroundColor: '#fff',
+            },
+            thumbStyle,
+          ]}
+        />
+      </Animated.View>
+    </Pressable>
   );
 }
 

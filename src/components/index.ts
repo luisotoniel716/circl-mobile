@@ -19,6 +19,10 @@ export { AddFriendModal } from './AddFriendModal';
 export { FriendPickerModal } from './FriendPickerModal';
 export { AnimatedNumber } from './AnimatedNumber';
 export { CreateGroupSuccess, type OrbitMember } from './CreateGroupSuccess';
+export { MatchPicksSheet } from './MatchPicksSheet';
+export { Jersey } from './Jersey';
+export { ScoreWheel, WHEEL_ITEM_H } from './ScoreWheel';
+export { StepProgress } from './StepProgress';
 
 // Re-export the themed Text + tokens so screens import from one place.
 export { Text, colors, spacing, radius, fontSize, shadow } from '../design-system';

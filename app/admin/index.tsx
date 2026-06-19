@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import {
   ScreenContainer, TopBar, CButton, Icon, Text, colors,
 } from '../../src/components';
@@ -89,19 +89,31 @@ export default function AdminMatchesList() {
         title="Admin · Partidos"
         onBack
         right={
-          <Pressable
-            onPress={() => router.push('/admin/match/new')}
-            hitSlop={8}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
-          >
-            <Icon name="add" size={18} color={colors.gold} />
-            <Text
-              numberOfLines={1}
-              style={{ color: colors.gold, fontSize: 12, fontWeight: '800' }}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            <Pressable
+              onPress={() => router.push('/admin/players' as Href)}
+              hitSlop={8}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
             >
-              NUEVO
-            </Text>
-          </Pressable>
+              <Icon name="people" size={18} color={colors.paper2} />
+              <Text numberOfLines={1} style={{ color: colors.paper2, fontSize: 12, fontWeight: '800' }}>
+                PLANTILLAS
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => router.push('/admin/match/new')}
+              hitSlop={8}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+            >
+              <Icon name="add" size={18} color={colors.gold} />
+              <Text
+                numberOfLines={1}
+                style={{ color: colors.gold, fontSize: 12, fontWeight: '800' }}
+              >
+                NUEVO
+              </Text>
+            </Pressable>
+          </View>
         }
       />
 

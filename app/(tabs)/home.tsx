@@ -121,6 +121,7 @@ export default function Home() {
         pts:     p.correct != null ? `+${p.points}` : m.pts,
         myPickGroupsPicked: p.groupCount,
         myPickGroupsTotal:  totalGroups,
+        myPickVaries:       p.varies,
       };
     });
   }, [allMatches, myPicks, totalGroups]);
@@ -462,7 +463,7 @@ interface WalletStackProps {
     id:        string;
     name:      string;
     icon:      string | null;
-    image_url: string | null;
+    image_url?: string | null;
     accent:    string;
     myRank:    number;
     myPts:     number;

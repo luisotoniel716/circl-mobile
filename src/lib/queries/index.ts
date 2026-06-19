@@ -3,6 +3,7 @@ export * from './groups';
 export * from './leagues';
 export * from './picks';
 export * from './admin';
+export * from './players';
 export * from './profile';
 export * from './stats';
 export * from './notifications';

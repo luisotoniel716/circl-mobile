@@ -5,13 +5,16 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withTiming, interpolateColor, Easing,
+} from 'react-native-reanimated';
 import {
   ScreenContainer, TopBar, Section, CButton, Avatar, Input, Icon, Text, colors,
   InviteFriendsModal,
 } from '../../../src/components';
 import { useAuth } from '../../../src/lib/auth';
 import {
-  useGroup, useGroupMembers, useUpdateGroup, useDeleteGroup,
+  useGroup, useGroupMembers, useUpdateGroup,
   useLeaveGroup, useUpdateMemberRole,
 } from '../../../src/lib/queries';
 import { pickImageFromLibrary, uploadImage } from '../../../src/lib/storage';
@@ -29,7 +32,6 @@ export default function GroupSettings() {
   const { data: group, isLoading: groupLoading } = useGroup(id);
   const { data: members = [], isLoading: membersLoading } = useGroupMembers(id);
   const updateGroup     = useUpdateGroup();
-  const deleteGroup     = useDeleteGroup();
   const leaveGroup      = useLeaveGroup();
   const updateRole      = useUpdateMemberRole();
 
@@ -46,10 +48,27 @@ export default function GroupSettings() {
   const [coverUploading, setCoverUploading] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
+  // Local mirror of the hide-picks setting for an instant, optimistic toggle.
+  const [hidePicks, setHidePicks] = useState(true);
 
   useEffect(() => {
-    if (group) setName(group.name);
+    if (group) {
+      setName(group.name);
+      setHidePicks(group.hide_picks_until_kickoff);
+    }
   }, [group]);
+
+  async function handleToggleHidePicks(next: boolean) {
+    if (!group || !isAdmin) return;
+    setHidePicks(next); // optimistic
+    try {
+      await updateGroup.mutateAsync({ group_id: group.id, hide_picks_until_kickoff: next });
+    } catch (e) {
+      setHidePicks(!next); // revert on failure
+      const msg = e instanceof Error ? e.message : 'No pudimos cambiar el ajuste.';
+      Alert.alert('Error', msg);
+    }
+  }
 
   const dirty = group ? name.trim() !== group.name : false;
   const canSaveName = isAdmin && dirty && name.trim().length >= 3 && !updateGroup.isPending;
@@ -110,7 +129,12 @@ export default function GroupSettings() {
   function handleLeavePress() {
     if (!group) return;
 
-    // Sole member → leaving deletes the group
+    // Sole member → leaving deletes the group. We call leaveGroup (which
+    // only removes the caller's own membership — always allowed by RLS,
+    // regardless of admin role). A DB trigger then deletes the now-empty
+    // group. This avoids the old bug where a non-admin sole member tapped
+    // "Eliminar grupo", the groups-DELETE RLS (admin-only) silently
+    // blocked it, and nothing happened.
     if (isSoleMember) {
       Alert.alert(
         'Eliminar grupo',
@@ -122,7 +146,7 @@ export default function GroupSettings() {
             style: 'destructive',
             onPress: async () => {
               try {
-                await deleteGroup.mutateAsync(group.id);
+                await leaveGroup.mutateAsync(group.id);
                 router.replace('/(tabs)/groups');
               } catch (e) {
                 const msg = e instanceof Error ? e.message : 'No pudimos eliminar el grupo.';
@@ -375,6 +399,21 @@ export default function GroupSettings() {
             </Pressable>
           </View>
 
+          {/* ── Privacy ────────────────────────────────── */}
+          <Section title="PRIVACIDAD">
+            <PickPrivacyRow
+              accent={group.accent}
+              value={hidePicks}
+              disabled={!isAdmin || updateGroup.isPending}
+              onChange={handleToggleHidePicks}
+            />
+            {!isAdmin ? (
+              <Text style={{ fontSize: 11, color: colors.mist, marginTop: 8, paddingLeft: 4 }}>
+                Solo los admins pueden cambiar este ajuste.
+              </Text>
+            ) : null}
+          </Section>
+
           {/* ── Members ────────────────────────────────── */}
           <Section title={`MIEMBROS (${members.length})`}>
             {membersLoading ? (
@@ -504,6 +543,81 @@ export default function GroupSettings() {
         groupAccent={group.accent}
       />
     </ScreenContainer>
+  );
+}
+
+// ─── Pick privacy toggle row ────────────────────────────────
+
+function PickPrivacyRow({
+  accent, value, disabled, onChange,
+}: {
+  accent: string;
+  value: boolean;
+  disabled: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  const t = useSharedValue(value ? 1 : 0);
+  useEffect(() => {
+    t.value = withTiming(value ? 1 : 0, { duration: 220, easing: Easing.out(Easing.cubic) });
+  }, [value, t]);
+
+  const TRACK_W = 48;
+  const THUMB   = 22;
+  const PAD     = 3;
+  const thumbStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: t.value * (TRACK_W - THUMB - PAD * 2) }],
+  }));
+  const trackStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(t.value, [0, 1], ['rgba(255,255,255,0.10)', accent]),
+  }));
+
+  return (
+    <Pressable
+      onPress={disabled ? undefined : () => onChange(!value)}
+      disabled={disabled}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 14,
+        padding: 14,
+        borderRadius: 14,
+        backgroundColor: colors.s800,
+        borderWidth: 1,
+        borderColor: value ? accent + '40' : 'rgba(255,255,255,0.06)',
+        opacity: disabled ? 0.6 : 1,
+      }}
+    >
+      <View style={{
+        width: 36, height: 36, borderRadius: 12,
+        alignItems: 'center', justifyContent: 'center',
+        backgroundColor: value ? accent + '22' : 'rgba(255,255,255,0.05)',
+      }}>
+        <Icon name="lock" size={16} color={value ? accent : colors.paper2} />
+      </View>
+
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ fontSize: 14, fontWeight: '800', color: colors.paper }}>
+          Ocultar picks hasta el partido
+        </Text>
+        <Text style={{ fontSize: 11.5, color: colors.mist, marginTop: 2, lineHeight: 16 }}>
+          Los miembros no verán los pronósticos de los demás hasta que inicie cada partido.
+        </Text>
+      </View>
+
+      <Animated.View
+        style={[
+          { width: TRACK_W, height: THUMB + PAD * 2, borderRadius: 9999, justifyContent: 'center', paddingHorizontal: PAD },
+          trackStyle,
+        ]}
+      >
+        <Animated.View
+          style={[
+            { width: THUMB, height: THUMB, borderRadius: THUMB / 2, backgroundColor: '#fff' },
+            thumbStyle,
+          ]}
+        />
+      </Animated.View>
+    </Pressable>
   );
 }
 

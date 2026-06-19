@@ -45,6 +45,9 @@ export interface Match {
   stadium: string;
   round: string;
   status: MatchStatus;
+  /** Team UUIDs (when sourced from Supabase) — used to look up lineups. */
+  home_team_id?: string;
+  away_team_id?: string;
   myPick: TeamCode | null;
   pts: string | null;
   score: [number, number] | null;
@@ -56,6 +59,8 @@ export interface Match {
    */
   myPickGroupsPicked?: number;
   myPickGroupsTotal?: number;
+  /** True when the user's prediction differs between groups for this match. */
+  myPickVaries?: boolean;
 }
 
 export interface Group {

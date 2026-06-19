@@ -204,7 +204,21 @@ export function useToggleGroupPin() {
           error: { message: string } | null;
         };
       if (readErr) throw new Error(readErr.message);
-      const current = data?.pinned_groups ?? [];
+      const stored = data?.pinned_groups ?? [];
+
+      // Reconcile against the user's ACTUAL group memberships. When a group
+      // is deleted (e.g. the user leaves a group where they're the sole
+      // member) its id lingers in pinned_groups as a phantom — and those
+      // phantoms used to count against MAX_PINNED_GROUPS, blocking the user
+      // from pinning real groups even when nothing appears pinned in the UI.
+      // We drop any pinned id that no longer maps to a membership row.
+      const { data: memberships, error: memErr } = await supabase
+        .from('group_members')
+        .select('group_id')
+        .eq('user_id', user.id);
+      if (memErr) throw new Error(memErr.message);
+      const validIds = new Set((memberships ?? []).map((r) => r.group_id));
+      const current = stored.filter((id) => validIds.has(id));
 
       let next: string[];
       let pinned: boolean;

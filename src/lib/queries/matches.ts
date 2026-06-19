@@ -31,6 +31,8 @@ type MatchRow = {
   home_score: number | null;
   away_score: number | null;
   matchday: number;
+  home_team_id?: string;
+  away_team_id?: string;
   home: { code: string; short_name: string } | null;
   away: { code: string; short_name: string } | null;
 };
@@ -51,6 +53,8 @@ function toUI(row: MatchRow, myPickCode: TeamCode | null = null): Match {
     id:         row.id,
     home:       (row.home?.code ?? 'AME') as TeamCode,
     away:       (row.away?.code ?? 'GDL') as TeamCode,
+    home_team_id: row.home_team_id,
+    away_team_id: row.away_team_id,
     kickoff:    formatKickoff(row.kickoff_at, status === 'live' ? 'live' : row.status),
     kickoff_at: row.kickoff_at,
     stadium:    '',                                // not in schema yet
@@ -123,6 +127,7 @@ export function useMatch(matchId: string | undefined) {
         .from('matches')
         .select(`
           id, kickoff_at, status, home_score, away_score, matchday,
+          home_team_id, away_team_id,
           home:home_team_id ( code, short_name ),
           away:away_team_id ( code, short_name )
         `)
